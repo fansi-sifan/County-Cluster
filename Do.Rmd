@@ -1,0 +1,157 @@
+---
+title: "Do"
+author: "Sifan Liu"
+date: "June 14, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pkgs <- c('dplyr','ggplot2', "caret", "car", "cluster", "factoextra")
+
+check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
+if(any(!check)){
+  pkgs.missing <- pkgs[!check]
+  install.packages(pkgs.missing)
+  check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
+} 
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r urban counties}
+counties_master <- read.csv("../oic_master.csv")
+head(counties_master)
+summary(counties_master)
+
+county2msa <- read.csv("../../R/xwalk/county2msa.csv")
+
+counties_summary <- counties_analysis %>%
+  
+```
+
+## Select variables of interest:
+
+```{r variables, echo=FALSE}
+counties_analysis <- counties_master %>%
+  left_join(county2msa, by = c("stcofips" = "fips")) %>%
+  filter(top100 == 1) %>%
+  filter(!is.na(type)) %>%
+  select(stcofips,pop2016, mf_share_2016,prod_2016,incpercap_16,
+         medinc16,ext_povrate_1216,fb_share_16,ba_rate_ch,DissInd_WB2015) %>%
+  na.omit()
+
+summary(counties_analysis)
+```
+
+
+```{r plot, echo = FALSE}
+data_res = counties_analysis[-1] 
+
+pca.vis <- prcomp(na.omit(data_res),center = TRUE, scale. = TRUE)
+plot(pca.vis, type = "lines")
+summary(pca.vis)
+```
+
+
+```{r PCA}
+features.pca <- preProcess(data_res, method = c("pca","center", "scale"), na.remove = TRUE)
+PC <- predict(features.pca, data_res)
+  
+```
+
+```{r initialize clustering}
+set.seed(2)
+dist.PC <- dist(PC, method = "euclidean")
+index_method <- "silhouette"
+h_methods <- c("ward.D2", "ward.D", "complete", "single")
+
+```
+
+```{r Kmeans}
+
+# kmeans
+
+lapply(h_methods, function(m)fviz_nbclust(PC, hcut, method = index_method, hc_method = m))
+fviz_nbclust(PC, kmeans, method = index_method)
+fviz_nbclust(PC, pam, method = index_method)
+
+
+```
+```{r kmeans}
+n_cluster_k <- 7
+
+clusters <- kmeans(PC,n_cluster_k)
+counties_analysis$kmeans <- as.factor(clusters$cluster)
+```
+
+```{r hierachical clustering}
+
+n_cluster_h <- 9
+h_method <- h_methods[[1]]
+
+h_clusters <- hclust(dist.PC,method = h_method)
+plot(h_clusters)
+rect.hclust(h_clusters, n_cluster_h)
+
+counties_analysis$hcut <- as.factor(cutree(h_clusters,n_cluster_h))
+
+# 
+# ss <- silhouette(as.numeric(GCItype$modified_cat), dist.PC)
+# s <- silhouette(as.numeric(features$cat), dist.PC)
+# 
+# plot(ss)
+```
+```{r summary}
+
+counties_summary <- counties_analysis %>%
+  left_join(county2msa, by = c("stcofips" = "fips"))
+
+summary(counties_summary)
+write.csv(counties_summary, "counties_cluster.csv")
+
+
+
+
+```
+
+```{r visualize clusters, echo=FALSE}
+
+# cluster <- "hcut"
+cluster <- "kmeans"
+
+counties_plot <- counties_analysis %>%
+  group_by_(cluster) %>%
+  select(-contains("fips"), -contains("FIPS"), -contains(("cbsa"))) %>%
+  summarise_if(is.numeric, median) %>%
+  tidyr::gather(indicator, median, pop2016:DissInd_WB2015)
+
+ggplot(counties_plot, aes_string("indicator", "median", color = cluster))+
+  geom_jitter(width = 0.1, alpha = 0.5)+
+  scale_color_manual(values = c("grey", "red", rep("grey",8)))+
+  facet_wrap(~indicator, scales = "free")+
+  theme_minimal()
+
+```
+```{r visualize within cluster}
+
+Birmingham_plot <- counties_summary %>%
+  filter(kmeans == 2) %>%
+  select(-contains("fips"), -contains("FIPS"), -contains(("cbsa"))) %>%
+  tidyr::gather(indicator, value, pop2016:DissInd_WB2015)
+
+ggplot(Birmingham_plot, aes(indicator, value, color = c(cty_name =="Jefferson County")))+
+  geom_jitter(width = 0.1, alpha = 0.5)+
+  # scale_color_manual(values = c("Jefferson County "))+
+  facet_wrap(~indicator, scales = "free")+
+  theme_minimal()
+
+
+```
+
