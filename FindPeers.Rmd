@@ -1,5 +1,5 @@
 ---
-title: "Do"
+title: "Find County Peers"
 author: "Sifan Liu"
 date: "June 14, 2018"
 output: html_document
@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-pkgs <- c('dplyr','ggplot2', "caret", "car", "cluster", "factoextra")
+pkgs <- c('dplyr','ggplot2', "caret", "car", "cluster", "factoextra", "dendextend")
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -19,20 +19,14 @@ if(any(!check)){
 
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
+## All counties with a urban city using OIC master dataset
 ```{r urban counties}
 counties_master <- read.csv("../oic_master.csv")
 head(counties_master)
-summary(counties_master)
 
 county2msa <- read.csv("../../R/xwalk/county2msa.csv")
 
-counties_summary <- counties_analysis %>%
   
 ```
 
@@ -41,7 +35,7 @@ counties_summary <- counties_analysis %>%
 ```{r variables, echo=FALSE}
 counties_analysis <- counties_master %>%
   left_join(county2msa, by = c("stcofips" = "fips")) %>%
-  filter(top100 == 1) %>%
+  # filter(top100 == 1) %>%
   filter(!is.na(type)) %>%
   select(stcofips,pop2016, mf_share_2016,prod_2016,incpercap_16,
          medinc16,ext_povrate_1216,fb_share_16,ba_rate_ch,DissInd_WB2015) %>%
@@ -50,7 +44,7 @@ counties_analysis <- counties_master %>%
 summary(counties_analysis)
 ```
 
-
+# PCA for feature selection
 ```{r plot, echo = FALSE}
 data_res = counties_analysis[-1] 
 
@@ -78,14 +72,16 @@ h_methods <- c("ward.D2", "ward.D", "complete", "single")
 
 # kmeans
 
-lapply(h_methods, function(m)fviz_nbclust(PC, hcut, method = index_method, hc_method = m))
+# lapply(h_methods, function(m)fviz_nbclust(PC, hcut, method = index_method, hc_method = m))
+
 fviz_nbclust(PC, kmeans, method = index_method)
-fviz_nbclust(PC, pam, method = index_method)
+
+# fviz_nbclust(PC, pam, method = index_method)
 
 
 ```
 ```{r kmeans}
-n_cluster_k <- 7
+n_cluster_k <- 6
 
 clusters <- kmeans(PC,n_cluster_k)
 counties_analysis$kmeans <- as.factor(clusters$cluster)
@@ -93,10 +89,11 @@ counties_analysis$kmeans <- as.factor(clusters$cluster)
 
 ```{r hierachical clustering}
 
-n_cluster_h <- 9
-h_method <- h_methods[[1]]
+n_cluster_h <- 6
+h_method <- h_methods[[3]]
 
 h_clusters <- hclust(dist.PC,method = h_method)
+
 plot(h_clusters)
 rect.hclust(h_clusters, n_cluster_h)
 
@@ -108,17 +105,14 @@ counties_analysis$hcut <- as.factor(cutree(h_clusters,n_cluster_h))
 # 
 # plot(ss)
 ```
+
 ```{r summary}
 
 counties_summary <- counties_analysis %>%
   left_join(county2msa, by = c("stcofips" = "fips"))
 
 summary(counties_summary)
-write.csv(counties_summary, "counties_cluster.csv")
-
-
-
-
+write.csv(counties_summary, "counties_cluster_all.csv")
 ```
 
 ```{r visualize clusters, echo=FALSE}
@@ -130,13 +124,24 @@ counties_plot <- counties_analysis %>%
   group_by_(cluster) %>%
   select(-contains("fips"), -contains("FIPS"), -contains(("cbsa"))) %>%
   summarise_if(is.numeric, median) %>%
-  tidyr::gather(indicator, median, pop2016:DissInd_WB2015)
+  tidyr::gather(indicator, median, pop2016:DissInd_WB2015) %>%
+  mutate(indicator = as.factor(indicator))
+
+
+ind_factor <- c( "BA_difference", "DISSInd_w_B", "extremepoverty_rate", 
+                "foreignborn_share","incomepercapita", "medianincome",
+               "manufacturing_share",  "population", "productivity") 
+
+levels(counties_plot$indicator) <- ind_factor
 
 ggplot(counties_plot, aes_string("indicator", "median", color = cluster))+
-  geom_jitter(width = 0.1, alpha = 0.5)+
-  scale_color_manual(values = c("grey", "red", rep("grey",8)))+
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  scale_color_manual(values = c("grey", "red", rep("grey",8))) +
   facet_wrap(~indicator, scales = "free")+
-  theme_minimal()
+  theme_minimal() %+%
+  theme(strip.text.x = element_blank())
+
+# ggsave("kmeans result.png")
 
 ```
 ```{r visualize within cluster}
@@ -144,14 +149,20 @@ ggplot(counties_plot, aes_string("indicator", "median", color = cluster))+
 Birmingham_plot <- counties_summary %>%
   filter(kmeans == 2) %>%
   select(-contains("fips"), -contains("FIPS"), -contains(("cbsa"))) %>%
-  tidyr::gather(indicator, value, pop2016:DissInd_WB2015)
+  tidyr::gather(indicator, value, pop2016:DissInd_WB2015) %>%
+  mutate(indicator = as.factor(indicator))
 
-ggplot(Birmingham_plot, aes(indicator, value, color = c(cty_name =="Jefferson County")))+
+levels(Birmingham_plot$indicator) <- ind_factor
+
+ggplot(Birmingham_plot, aes(indicator, value, color = c((cty_name =="Jefferson County") & (st_name == "Alabama"))))+
   geom_jitter(width = 0.1, alpha = 0.5)+
-  # scale_color_manual(values = c("Jefferson County "))+
+  scale_color_discrete(labels =  c("Others","Jefferson County, AL"),
+                     name = element_blank())+
   facet_wrap(~indicator, scales = "free")+
-  theme_minimal()
+  theme_minimal()%+%
+  theme(strip.text.x = element_blank())
 
 
+# ggsave("kmeans peers.png")
 ```
 
