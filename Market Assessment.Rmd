@@ -1,62 +1,119 @@
 ---
 title: "Brookings Metro Market Assessment"
 author: "Sifan Liu"
-date: "August 9, 2018"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
 output: html_document
 ---
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library('tidyverse', 'knitr')
-source("Graphics.R")
-source("ACSapi.R")
-
-padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
+source("Func.R")
+source("QWIapi.R")
+source("V:/Sifan/R/code/ACSapi.R")
 ```
 
 # Set Up
 
 ```{r place of interest}
+# assign geocodes for analysis
 city_FIPS <- "07000"
 ct_FIPS <- "073"
 msa_FIPS <- "13820"
 st_FIPS <- "01"
 county_FIPS <- paste0(st_FIPS, ct_FIPS)
 
-placename <- "Birmingham City"
+# determine which census tracts falls in the city boundry based on population
+xwalk.Bham <- read.csv("source/Bham_city_tracts.csv", colClasses = "character") %>%
+  separate(tract, c("a","b"))%>%
+  mutate(b = replace(b, is.na(b), 0))
+city_tracts <- paste0(padz(xwalk.Bham$a,4), padz(xwalk.Bham$b,2))
+
+# assign names for text display
+placename <- "Birmingham"
 countyname <- "Jefferson County, AL"
 metroname <- "Birmingham MSA"
 
+# load datasets
 load(paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))
 
 ```
 
+
+```{r map setup, echo=FALSE, include=FALSE}
+library(tigris)
+# US metro map
+usa <- map_data("state")
+cbsa = core_based_statistical_areas()
+
+# # maps
+map.cty <- tidy(tracts(state = st_FIPS, county = ct_FIPS), region = "GEOID")
+# map of the city
+map.Bham <- tidy(places(state = st_FIPS) %>% filter_place(placename), region = "GEOID")
+
+MSA_tractACS <- datafiles$MSA_tractACS
+
+
+```
+
 # Analysis
+## Peers map
+```{r peers dot map, echo=FALSE}
+mm_code <- Peers$cbsa
+
+map_data <- cbsa@data %>% filter(CBSAFP %in% mm_code)
+map_data$long = -as.numeric(substring(map_data$INTPTLON,2))
+map_data$lat = as.numeric(map_data$INTPTLAT)
+
+p_peermap <- ggplot()+
+  geom_polygon(data = usa, aes(x = long, y = lat, group = group), fill = "white", color = "grey") +
+  coord_map("albers", lat0=39, lat1=45) +
+  geom_point(data = map_data, aes(x = long, y = lat, fill = (CBSAFP == msa_FIPS)), size = 6, shape = 21)+
+  scale_fill_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)+
+  pthemes%+%theme(axis.text = element_blank(),axis.ticks = element_blank(), axis.title = element_blank())
+# ggsave("metro11.png", bg = "transparent", width = 12)
+
+```
+
 
 ## Overview
 ### Metro Monitor rankings for peer metros, 2006 - 2016
 Birmingham MSA has lagged large metros in all three categories. 
 ```{r metromonitor, echo=FALSE}
-knitr::kable(datafiles$Peermetro_MM %>% select(cbsa_name, contains("rank")))
-MSA_MM <- datafiles$Peermetro_MM %>% filter(cbsa %in% msa_FIPS) 
+knitr::kable(Peermetro_MM %>% select(cbsa_name, contains("rank")))
+MSA_MM <- datafiles$PeerMetro_MM %>% filter(cbsa %in% msa_FIPS) 
 ```
 
 ### (TODO) Struggling Families
+```{r poverty by race}
+temp <- tidycensus::get_acs(variables = poverty_race,year=2016, geography = "county",state="AL",county="Jefferson")%>%
+  separate(variable, into=c("race",'var'))%>%
+  select(-moe)%>%
+  spread(var, estimate)%>%
+  mutate(poverty_share = `002`/`001`)
+```
 
 
 ## Tradable Sectors
 
 ### Employment in Tradable sectors
 A quarter of Birmingham's labor force is employed in tradable sectors
-```{r traded sector employment 06 - 16, echo = FALSE, fig.height=6}
-traded <- datafiles$PeerMetro_traded %>% ungroup()%>%
-  left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
-  select(cbsa, 
-         metro, 
-         value = EmpTradedShare16) %>%
-  mutate(HL = c(cbsa == msa_FIPS))
+```{r traded sector, echo = FALSE, fig.height=6, fig.width=10}
+# traded <- datafiles$PeerMetro_traded %>% ungroup()%>%
+#   left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
+#   select(cbsa, metro, EmpTradedShare06, EmpTradedShare16)%>%
+#   gather(var, value, EmpTradedShare16:EmpTradedShare06)%>%
+#   mutate(HL = c(cbsa == msa_FIPS))
 
-bar_plot(traded, "Employment share of traded sector, 2016", HL)+
-    scale_y_continuous(labels = scales::percent)
+ggplot(data = Peer_traded, 
+       aes(x=factor(Year), y = EmpShare, color = c(Area==msa_FIPS | Area == "1073"), group = Area))+
+  geom_point(size = 5)+
+  geom_line(size = 2)+
+  scale_color_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)+
+  # geom_text(nudge_x = 0.5)+
+  ggtitle("Change in employment share of traded sector, 2006 - 2016")+
+  scale_y_continuous(labels = scales::percent)+
+  facet_wrap(~Area.Bucket)+
+  theme_minimal()
 ```
 
 
@@ -64,7 +121,7 @@ bar_plot(traded, "Employment share of traded sector, 2016", HL)+
 Tradable sectors tend to pay higher wages in the region. Finance and insurance exhibits robost growth. 
 Overall, employment in Brimingham is growing slower than the nation's for most industries. 
 
-```{r shift share, echo = FALSE, fig.width=16, fig.height=8}
+```{r shift share, echo = FALSE, fig.width=12, fig.height=8}
 Traded_NAICS2 <- c("FH", "21", "31", "51", "52", "54", "61", "FR")
 
 ss <- datafiles$MSA_shiftshare %>%
@@ -77,8 +134,6 @@ ss <- datafiles$MSA_shiftshare %>%
          traded_2 = ifelse(naics2 %in% Traded_NAICS2, 1, 0)) %>%
   filter(!naics2 %in% c("PH", "PNFTOT", "TOTAL"))
 
-
-
 Wageline <- MSA_MM$`Average Annual Wage`*1000
 
 ggplot()+
@@ -88,19 +143,20 @@ ggplot()+
                             size = Employment_value, color = as.factor(traded_2)), alpha = 0.5) +
   geom_text_repel(data = ss, aes(Employment_lsshare2006, Wage_2016, label = industryname_naics2))+
   xlab(paste0("Industry employment growth rate differential between ",metroname," and nation, 2006-2016")) +
-  annotate("label", x=-0.25, y = Wageline, 
+  annotate("label", x=0.25, y = Wageline, 
            label = paste0(scales::dollar(Wageline), ", Average annual wage in the region, 2016"), color = "dark grey")+
-  annotate("label", x=-0.3, y = 100000, label = "Higher wage\nslower growth than U.S.", fill = "light grey")+
-  annotate("label", x=-0.3, y = 40000, label = "Lower wage\nslower growth than U.S.", fill = "light grey")+
-  annotate("label", x=0.25, y = 100000, label = "Higher wage\nfaster growth than U.S.")+
-  annotate("label", x=0.25, y = 40000, label = "Lower wage\nfaster growth than U.S.", fill = "light grey")+
+  annotate("label", x=-0.2, y = 90000, label = "Higher wage\nslower growth than U.S.")+
+  annotate("label", x=-0.2, y = 40000, label = "Lower wage\nslower growth than U.S.")+
+  annotate("label", x=0.2, y = 90000, label = "Higher wage\nfaster growth than U.S.")+
+  annotate("label", x=0.2, y = 40000, label = "Lower wage\nfaster growth than U.S.")+
     ylab("Average wage, 2016")+
   scale_x_continuous(labels = scales::percent)+
   scale_y_continuous(labels = scales::comma)+
   scale_size_continuous(range = c(1,15),
                         labels = scales::comma, name = "Total employment, 2016")+
-  scale_color_discrete(labels = c("Non-tradable", "Tradable"), name = NULL)+
-  theme_classic()
+  scale_color_manual(labels = c("Non-tradable", "Tradable"), name = NULL, values = c("#0070c0", "#ffc000"))+
+  ggtitle("Average wage and employment shift share by industry, 2006 - 2016")+
+  pthemes
 
 ```
 
@@ -143,25 +199,36 @@ knitr::kable(datafiles$MSA_export %>%
 ### NSF Fundings
 
 The University of Alabama at Birmingham boosts strong research strengths
-```{r NSF, echo = FALSE, fig.height=6}
+```{r NSF, echo = FALSE, fig.height=6, fig.width=10}
 
-NSF <- datafiles$PeerMetro_univRD %>%
-  left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
-  select(cbsa,msaemp,
+NSF <- bind_rows(datafiles$PeerMetro_univRD %>%
+  left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
+  select(FIPS = cbsa,
+         pop = msapop,
          metro,
          value = RDtotal
          ) %>%
-  mutate(HL = c(cbsa == msa_FIPS), 
-         value = value/msaemp)
+  mutate(HL = c(FIPS == msa_FIPS), 
+         value = value/pop, geo = "msa"),
+  
+  PeerCounty_univRD %>%
+    left_join(datafiles$Peers[c('FIPS', "county", "ctypop")], by = "FIPS")%>%
+    select(FIPS, 
+         pop = ctypop, 
+         metro = county.y, 
+         value = RDtotal) %>%
+  mutate(HL = c(FIPS == county_FIPS), value = value/pop, geo = "county")
+)
 
 bar_plot(NSF, "R&D expenditures at higher education institution ($ per capita), 2012 - 2016", HL)+
-    scale_y_continuous(labels = scales::comma)
+    # scale_y_continuous(labels = scales::comma) %>%
+  facet_wrap(~geo, scales = "free")
 ```
 
 ### R&D expenditure by fields in Birmingham 
 
-```{r UAB, echo = FALSE}
-RD_cat <- c("Biological and biomedical sciences", "Health sciences", "Engineering", "All R&D fields")
+```{r UAB, echo = FALSE, fig.width=6}
+RD_cat <- c("Biological and biomedical sciences", "Health sciences", "Life sciences, nec","Engineering", "All R&D fields")
 
 UAB_RD <- datafiles$MSA_univRD$`1052` %>% 
   rename(fields  =`University of Alabama at Birmingham, The` ) %>%
@@ -170,17 +237,26 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
   mutate_at(vars(matches("X")), as.numeric) %>%
   mutate(value = rowSums(.[2:6])) %>%
   select(-contains("X")) %>%
-  rbind(c("All Other fields",(.$value[1] - sum(.$value[2:4])))) %>%
+  rbind(c("All other fields",(.$value[1] - sum(.$value[2:4])))) %>%
   filter(fields != "All R&D fields") %>%
   mutate(value = as.numeric(value))
 
-ggplot(UAB_RD, aes(x = "", y = value, fill = reorder(fields,value))) +
-  geom_bar(stat = "identity", position = "fill") +
-  coord_polar("y")+
-  scale_y_continuous(labels = scales::comma, name = "R&D expenditure") +
-  ggtitle(paste0("R&D expenditure by fields at universities in ", metroname))+
-  scale_fill_brewer(palette = "Blues",name = "fields")+
-  theme_minimal()
+myorder <- c("Biological and biomedical sciences", "Health sciences", "Life sciences, nec","Engineering", "All other fields")
+
+ggplot(UAB_RD, aes(x = fields, y = value, fill = fields, label = fields)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::dollar)+
+  # coord_polar("y")+
+  # geom_text()+
+  ggtitle(paste0("R&D expenditure by fields at UAB, FY2016"))+
+  scale_x_discrete(limits = myorder,name = "fields")+
+  scale_fill_manual(values = c("Biological and biomedical sciences" = "#2166ac", 
+                                "Health sciences" = "#67a9cf", 
+                                "Life sciences, nec" = "#d1e5f0",
+                                "Engineering" = "#fddbc7", 
+                                "All other fields" = "#ef8a62"),
+                    name = "fields")+
+  pthemes
   
   
 
@@ -192,7 +268,7 @@ ggplot(UAB_RD, aes(x = "", y = value, fill = reorder(fields,value))) +
 Research does not translate into innovation or business dynamism
 
 #### REGPAT summary for peer metros
-```{r read REGPAT data, echo = FALSE, fig.height=6}
+```{r read REGPAT data, echo = FALSE, fig.height=6, fig.width=8}
 Regpat <- datafiles$PeerMetro_REGPAT %>%
   left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
   select(cbsa,msaemp,
@@ -212,8 +288,9 @@ bar_plot(Regpat, "Number of REGPAT patent applications per 1000 workers, 2008 - 
 Top patenting actvities concentrated in Life sciences, followed by advanced manufacturing.
 
 ```{r REGPAT details, echo = FALSE}
-knitr::kable(datafiles$MSA_REGPAT %>% arrange(-ApplicationSum), digits = 2)
-  
+
+MSA_REGPAT %>% group_by(Company)%>%summarise(count= n()) %>% arrange(-count)
+
 ```
 
 
@@ -249,7 +326,7 @@ bar_plot(patent, "Total number of USPTO patents per 1000 workers, 2000 - 2015", 
 ```
 
 #### Patent complexity scores for peer metros
-```{r complexity, echo=FALSE}
+```{r complexity, echo=FALSE, fig.width=6, fig.height=6}
 # Complexity 
 patent <- datafiles$PeerMetro_patentCOMP %>%
   left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
@@ -259,109 +336,788 @@ patent <- datafiles$PeerMetro_patentCOMP %>%
          ) %>%
   mutate(HL = c(cbsa == msa_FIPS))
 
-bar_plot(patent, "patent complexity score", HL)+
-    scale_y_continuous(labels = scales::comma)
+bar_plot(patent, "patent complexity score", HL)
 
 ```
 
 ### Startups and VC
-```{r startups, echo=FALSE}
+```{r startups, echo=FALSE, fig.height=6, fig.width=6}
 VC <- datafiles$PeerMetro_VC %>%
   left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
-  mutate(value = rowSums(.[3:8], na.rm = TRUE)) %>%
-  group_by(cbsa, metro) %>%
-  summarise(msaemp = sum(msaemp, na.rm = TRUE), 
-            value = sum(value, na.rm = TRUE)) %>%
-  select(cbsa,msaemp,
-         metro,
-         value
-         ) %>%
-  mutate(HL = c(cbsa == msa_FIPS), 
-         value = value/msaemp)
+  mutate(HL = c(cbsa == msa_FIPS))
 
-bar_plot(VC, "VC investment per 1000 workers", HL)+
+bar_plot(VC, "VC investment per 1M residents, 2015 - 2017", HL)+
     scale_y_continuous(labels = scales::comma)
 
   
 ```
 
-### Firm Dynamics
-Employment in young firms is declining in Birmingham MSA
-```{r BDS data, echo=FALSE}
-firmage <- datafiles$PeerMetro_BDS %>%
-  mutate(Age = case_when(.$fage4 %in% letters[1:2] ~ "0 ~ 1 year",
-                           .$fage4 %in% letters[2:7] ~ "2 ~ 10 year",
-                           .$fage4 %in% letters[7:12]~ "11 years and above")) %>%
-  mutate_at(c("emp", "estabs"), funs(as.numeric(.))) %>%
-  left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
-  group_by(Age, cbsa, metro) %>%
-  summarise_if(is.numeric, sum) %>%
-  mutate(HL = c(cbsa == msa_FIPS))
-  
-myorder <- firmage %>% 
-  group_by(metro) %>%
-  mutate(share = emp/sum(emp)) %>%
-  filter(Age == "11 years and above") %>% arrange(desc(share)) %>%.$metro
+```{r Inc 5000, echo=FALSE, fig.height=6, fig.width = 6}
 
-ggplot(firmage, aes(x = metro, y = emp, alpha = HL,
-                    fill = factor(Age, levels = c("0 ~ 1 year", "2 ~ 10 year", "11 years and above"))))+
-  geom_bar(stat = "identity", position = position_fill(reverse = TRUE)) +
-  scale_y_continuous(labels = scales::percent) +
-  scale_fill_brewer(type = "seq", palette = "Blues", direction = -1, name = "Firm age") +
-  scale_x_discrete(limits = myorder)+
-  scale_alpha_manual(values = c("TRUE" = 1, "FALSE" = 0.5), guide = F)+
-  ggtitle(paste0("Share of employment in ",metroname," by firm age")) +
-  coord_flip()+
-  theme_classic()
+I5HGC <- datafiles$PeerMetro_I5HGC %>%
+  right_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+  select(cbsa,msaemp,
+         metro,
+         value = I5HGC_Density
+         ) %>%
+  mutate(HL = c(cbsa == msa_FIPS))
+
+bar_plot(I5HGC, "Number of Inc5000 high growth companies per 1 million residents, 2011 - 2017", HL)+
+  scale_y_continuous(labels = scales::comma)+
+  labs(x = NULL, y = NULL)+
+  pthemes
 
 ```
 
-```{r BDS firm size by firm age, echo=FALSE}
-fsfa <- bind_rows( datafiles$MSA100_fafs %>% mutate(geo = "metro100"),
-                   datafiles$MSA_fafs %>% mutate(geo = "MSA"))%>%
-  separate(fsize, c("size_code", "size_label"), sep = "\\)") %>%
-  separate(fage4, c("age_code", "age_label"), sep = "\\)") %>%
-  mutate(Age = case_when(.$age_code %in% letters[1:7] ~ "0 ~ 10 years",
-                           .$age_code %in% letters[7:12]~ "11 years and above")) %>%
-  mutate(Size = case_when(.$size_code %in% letters[1:5] ~ "Small ( < 100 employees)",
-                           .$size_code %in% letters[5:6] ~ "Medium ( 100 - 500 employees)",
-                           .$size_code %in% letters[6:12]~ "Large ( 500 employees and above)")) %>%
-  group_by(Age, Size, geo) %>%
-  summarise(emp = sum(emp, na.rm = TRUE)) 
-  
-ggplot(data = fsfa, aes(x = geo, y = emp, 
-                        fill = factor(Age, levels = c("11 years and above","0 ~ 10 years")))) +
-  geom_bar(stat = "identity", position = "fill") +
-  scale_fill_discrete(name = "Firm age")+
-  scale_x_discrete(labels = c(metroname, "Top 100 metros"), name = NULL)+
+
+### Firm Dynamics
+
+```{r BDS firm size by firm age, echo=FALSE, fig.width=8}
+fsfa <- PeerMetro_fafs %>%
+  filter(msa == msa_FIPS) %>%
+  group_by(Age, Size, year2) %>%
+  summarise(emp = sum(emp, na.rm = TRUE), 
+            net_job_creation = sum(net_job_creation, na.rm = TRUE),
+            count=n())
+
+ggplot(data = fsfa%>%group_by(Age, Size)%>%summarise(JbC = mean(net_job_creation)), 
+       aes(x = Age, y = JbC, fill = Size))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette = "Spectral")
+
+```
+
+ Employment in young firms is declining in Birmingham MSA
+```{r}
+
+# t <- PeerMetro_fafs %>% 
+#   group_by(geo = (msa == msa_FIPS), year2) %>%
+#   mutate(emp.share = emp/sum(emp))%>%
+#   filter(Age == "0 ~ 5 years")
+# 
+# ggplot(data = t,
+#        aes(x = factor(year2), y = emp.share,label = scales::percent(emp.share),
+#            fill = factor(Size), alpha = geo)) +
+#   scale_alpha_manual(values = c("TRUE" = 1, "FALSE" = 0.5), guide = F)+
+#   geom_bar(stat = "identity", position = "stack") +
+#   # scale_x_discrete(labels = c("Peer metros average", metroname), name = NULL)+
+#   scale_y_continuous(labels = scales::percent, name = "Share of employment")+
+#   ggtitle("Share of employment at young firms (0  ~ 10 years) by firm size in Birmingham MSA")+
+#   # geom_text(position = position_stack(vjust = 0.5))+
+#   facet_wrap(~geo, nrow = 2)+
+#   pthemes
+
+```
+
+
+```{r young firm job growth}
+p_BDS <- ggplot(data = fsfa %>%group_by(year2, Age)%>%summarise(JbC = sum(net_job_creation)),
+       aes(x = factor(year2), y=JbC, fill = Age))+
+  scale_y_continuous(labels = scales::comma, name = "Net job creation")+
+  scale_fill_manual(values = c("#0070c0", "#ffc000", "#ffd966"))+
+  labs(x = NULL, title = "Net job creation by firm age, Birmingham MSA")+
+  geom_bar(stat = "identity")+pthemes
+
+t <- fsfa %>% 
+  group_by(year2) %>% 
+  mutate(emp.share = emp/sum(emp))%>%
+  filter(Age == "0 ~ 5 years")%>%
+  mutate(emp.stot = sum(emp.share))
+
+p_young <- ggplot(data = t,
+       aes(x = factor(year2), y=emp.share, fill = Size))+
+  geom_bar(stat = "identity")+
   scale_y_continuous(labels = scales::percent, name = "Share of employment")+
-  ggtitle("Share of employment by firm age and firm size, 2014")+
-  coord_flip()+
-  facet_grid(rows = vars(Size))+
-  theme(strip.text.y = element_text(angle = 0),
-        legend.position = "bottom")
+  geom_text(data = t%>%filter(Size=="Large ( 500 employees and above)"), 
+            aes(label= scales::percent(emp.stot), y = emp.stot), 
+            position = position_stack(vjust = 1.1))+
+  scale_fill_manual(values = c("#0070c0", "#ffc000", "#ffd966"))+
+  labs(x = NULL, title = "Share of employment at young firms (0  ~ 10 years) by firm size in Birmingham MSA")+pthemes
+
+```
+
+```{r source: qwi}
+
+# RUN
+temp <- getQWI(key,"Emp,FrmJbCS",
+               "county:073", "state:01",
+               "from 2002-Q1 to 2017-Q4")
+
+county_EpC <- temp %>% 
+  separate(time, into = c("year", "quarter"))%>%
+  filter(quarter=="Q4")%>%
+  group_by(year, firmage)%>%
+  summarise(Emp = sum(as.numeric(Emp)))
+
+county_JbC <- bind_rows(temp) %>% 
+  mutate(year = substr(time, 1,4)) %>%
+  group_by(year, firmage)%>%
+  summarise(FrmJbC = sum(as.numeric(FrmJbCS)))
+
+data = county_JbC %>% 
+  filter(year > 2006)%>%
+  group_by(firmage)%>%
+  summarise(FrmJbC = mean(FrmJbC))
+
+ggplot(data = county_JbC, aes(x = year, y = FrmJbC, fill = firmage))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette = "Set1", labels = c("0-1 Years", "2-3 Years", "4-5 Years", "6-10 Years", "11+ Years"))
+
+ggplot(data ,aes(x = firmage, y = FrmJbC, fill = firmage))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette = "Set1", labels = c("0-1 Years", "2-3 Years", "4-5 Years", "6-10 Years", "11+ Years"))
+
+
+
 ```
 
 
 ### Advanced Industries
 ```{r Advanced Industries, echo = FALSE}
-traded <- datafiles$PeerMetro_ai %>%
-  left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
-  select(cbsa, 
-         metro, 
-         value = EmpAIShare16) %>%
-  mutate(HL = c(cbsa == msa_FIPS))
+# AI <- datafiles$PeerMetro_ai %>%
+#   left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
+#   select(cbsa, 
+#          metro, 
+#          value = EmpAIShare16) %>%
+#   mutate(HL = c(cbsa == msa_FIPS))
+# 
+# bar_plot(AI, "Employment share of advanced industries, 2016", HL)+
+#     scale_y_continuous(labels = scales::percent)
 
-bar_plot(traded, "Employment share of traded sector, 2016", HL)+
-    scale_y_continuous(labels = scales::percent)
+
+ggplot(data = Peer_ai,aes(x=factor(Year), y = EmpShare, color = c(Area==msa_FIPS | Area == "1073"), group = Area))+
+  geom_point(size = 5)+
+  geom_line(size = 2)+
+  scale_color_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)+
+  # geom_text(nudge_x = 0.5)+
+  ggtitle("Change in employment share of advanced industries, 2006 - 2016")+
+  scale_y_continuous(labels = scales::percent)+
+  facet_wrap(~Area.Bucket)+
+  theme_minimal()
 ```
 
+### SME loans
+
+```{r SME loans, echo=FALSE, fig.width=10, warning=FALSE}
+
+SME_loans <- PeerCounty_SMEloans %>% ungroup()%>%
+  select(-county) %>%
+  left_join(datafiles$Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
+  select(FIPS,ctyemp, county, program, year_range,
+         value = amt.tot) 
+
+SME_loans_plot <- SME_loans%>%
+  filter(!is.na(year_range))%>%
+  mutate(HL = c(FIPS == county_FIPS),
+         program = as.factor(program),
+         value = value/ctyemp,
+         # value = value.s/ctyemp,
+         metro = county) %>%
+  # filter(program =="FDIC")%>%
+  filter(program != "FDIC")%>%
+  group_by(FIPS)%>%
+  mutate(value.total = sum(value, na.rm = TRUE))
+
+ggplot(SME_loans_plot,aes(x = reorder(metro,value.total), alpha = HL, y = value, fill = program))+
+  geom_bar(stat = "identity", position = "stack")+
+  coord_flip()+
+  ggtitle("Source of loan financing by total $ amount per thousand employee, 2005 - 2016")+
+  scale_alpha_manual(values = c(0.2,1),guide = FALSE)+
+  # geom_text(aes(label = scales::comma(value)), position = position_stack())+
+  # scale_fill_discrete()+
+  # facet_wrap(~(program=="FDIC"), scales = "free")+
+  scale_y_continuous(labels = scales::dollar)+
+  theme_minimal()
+```
+
+
+
+```{r}
+opr <- function(df){
+  df %>%
+    group_by(Bham, program, year_range, emp.tot)%>%
+    summarise(amt.tot = sum(as.numeric(amt.tot), na.rm = TRUE))%>%
+    filter(!is.na(year_range))%>%
+    mutate(value = amt.tot/emp.tot)
+}
+
+temp <- bind_rows(PeerMetro_SMEloans %>%
+                    right_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+                    group_by(Bham = (cbsa == msa_FIPS),year_range,program) %>%
+                    mutate(emp.tot = sum(msaemp, na.rm = TRUE))%>%
+                    opr()%>%
+                    mutate(geo = "MSA"),
+                  
+                  PeerCounty_SMEloans %>%
+                    right_join(datafiles$Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
+                    group_by(Bham = (FIPS == county_FIPS),year_range,program) %>%
+                    mutate(emp.tot = sum(ctyemp, na.rm = TRUE))%>%
+                    opr()%>%
+                    mutate(geo = "county")
+)
+p_SME <- function(df,pgm){ggplot(data = temp%>%filter(program==pgm), 
+                                 aes(x = year_range, y = value, fill = Bham))+
+  geom_bar(stat = "identity", position = "dodge")+
+  scale_y_continuous(labels = scales::dollar_format())+
+  scale_fill_manual(name = element_blank(), 
+                   values = c("#0070c0", "#ffc000"), 
+                   labels = c( "Peer average", placename))+
+  labs(title = paste0("Per employee amount of ",pgm," loans to SMEs"),
+       x = element_blank(),
+       y = "Per employee loan amount")+
+  geom_text(aes(label = scales::dollar(value)), position = position_dodge(width = 1))+
+  # theme(legend.position = "bottom")+
+  facet_wrap(~geo, nrow = 1)+pthemes}
+
+p_CDFI <- p_SME(temp, "CDFI")
+# p_SME(temp, "SSTR")
+p_EXIM <- p_SME(temp, "EXIM")
+# p_SME(temp, "SBA")
+p_FDIC <- p_SME(temp, "FDIC")
+```
+
+
+```{r tract level data and map, echo=FALSE}
+library(tidycensus)
+
+var1990 <- c(sapply(seq(1,5),function(x)paste0("P006000",x)),"P0010001")
+var2000 <-  sapply(seq(1,6),function(x)paste0("P00300",x)) 
+var2010 <-  sapply(seq(1,5),function(x)paste0("P00300",x)) 
+
+Bham_tract_data <- function(YEAR){get_decennial(geography = "tract", year = YEAR,
+                          state = st_FIPS, county = ct_FIPS,output = "wide",geometry = TRUE,
+                          variables = eval(parse(text = paste0("var",YEAR))))}
+
+years <- lst(1990, 2000, 2010)
+census <- purrr::map(seq(1990,2010,10),Bham_tract_data) %>%map2(years, ~ mutate(.x, id = .y))
+```
+
+```{r}
+census[[1]] <- census[[1]]%>%select(id, black = P0060002, total = P0010001, geometry)
+census[[2]] <- census[[2]]%>%select(id, black = P003004, total = P003001, geometry)
+census[[3]] <- census[[3]]%>%select(id, black = P003003, total = P003001, geometry)
+
+nc <- mapedit:::combine_list_of_sf(census)
+
+ggplot(nc) +
+  geom_sf(aes(fill = black/total), color = NA) +
+  coord_sf(datum = NA) +
+  # geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_continuous("Share of black population", trans = "reverse")+
+  # ggtitle(paste0(id,": Share of overall black population is ", scales::percent(sum(black)/sum(total))))+
+  facet_wrap(~ id)
+
+```
+
+
+```{r, racial map, echo = FALSE}
+ggplot(census[[1]], aes(fill = P0060002/P0010001))+geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_continuous("Share of black population", trans = "reverse")+
+  ggtitle(paste0("1990: Share of overall black population is ",
+                 scales::percent(sum(census[[1]]$P0060002)/sum(census[[1]]$P0010001))))
+
+ggplot(census[[2]], aes(fill = P003004/P003001))+geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_continuous("Share of black population", trans = "reverse")+
+  ggtitle(paste0("2000: Share of overall black population is ",
+                 scales::percent(sum(census[[2]]$P003004)/sum(census[[2]]$P003001))))
+ggplot(census[[3]], aes(fill = P003003/P003001))+geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_continuous("Share of black population", trans = "reverse")+
+  ggtitle(paste0("2010: Share of overall black population is ",
+                 scales::percent(sum(census[[3]]$P003003)/sum(census[[3]]$P003001))))
+
+```
+
+```{r}
+Bham_SMEloans <- datafiles$MSA_SMEloan
+
+Bham_SMEloans <- bind_rows(
+Bham_SMEloans$EXIM_matched %>%
+  rename(year = Fiscal.Year)%>%
+  mutate(GEOID = substr(FIPS, 1,11)) %>%
+  group_by(GEOID, year)%>%
+  summarise(amt.tot = sum(Approved.Declined.Amount, na.rm = TRUE)) %>%
+  mutate(program = "EXIM") %>%
+  select(year, amt.tot, GEOID, program),
+Bham_SMEloans$SBA_matched %>%
+  mutate(year = as.integer(ApprovalFiscalYear),
+         GEOID = substr(FIPS, 1,11)) %>%
+  group_by(GEOID, year)%>%
+  summarise(amt.tot = sum(GrossApproval, na.rm = TRUE)) %>%
+  mutate(program = "SBA") %>%
+  select(year, amt.tot, GEOID, program),
+Bham_SMEloans$SSTR_matched %>%
+  rename(year = Award.Year) %>%
+  mutate(GEOID = substr(FIPS, 1,11)) %>%
+  group_by(GEOID, year)%>%
+  summarise(amt.tot = sum(Award.Amount, na.rm = TRUE)) %>%
+  mutate(program = "SSTR") %>%
+  select(year, amt.tot, GEOID, program),
+Bham_SMEloans$FDIC_matched %>%
+  mutate(year = as.integer(year),
+         FIPS = gsub("\\.","",FIPS),
+         GEOID = paste0(State, county, FIPS),
+         amt.tot = x_tot,
+         program = "FDIC") %>%
+  select(year, amt.tot, GEOID, program),
+Bham_SMEloans$TLR_matched %>%
+  mutate(year = as.integer(Year), 
+         GEOID = FIPS)%>%
+  group_by(GEOID, year)%>%
+  summarise(amt.tot = sum(originalamount, na.rm = TRUE)) %>%
+  mutate(program = "CDFI") %>%
+  select(year, amt.tot, GEOID, program)
+  
+)
+
+```
+
+```{r}
+tract_income <- datafiles$MSA_SMEloan$FDIC_matched %>%
+  mutate(year = as.integer(year))%>%
+  select(income, GEOID = FIPS, year) %>% distinct()
+
+all_program <- Bham_SMEloans %>%
+  left_join(census[[1]], by = "GEOID")%>% 
+  mutate(pop1990 = P0010001,
+         per.black.1990 = P0060002/P0010001,
+         per.white.1990 = P0060001/P0010001)%>%
+  select(-contains("P00"), -NAME, -geometry)%>%
+  left_join(census[[2]], by ="GEOID")%>% 
+  mutate(pop2000 = P003001,
+         per.black.2000 = P003004/P003001,
+         per.white.2000 = P003003/P003001)%>%
+  select(-contains("P00"), -NAME,-geometry)%>%
+  left_join(census[[3]], by = "GEOID")%>% 
+  mutate(pop2010 = P003001,
+         per.black.2010 = P003003/P003001,
+         per.white.2010 = P003002/P003001)%>%
+  select(-contains("P00"), -NAME,-geometry)%>%
+  left_join(tract_income, by = c("year", "GEOID")) %>%
+  mutate(is.city = GEOID %in% city_tracts,
+         is.lowinc = income %in% padz(seq(2,8,1),3)) 
+
+# na.share(test,"pop1990")
+```
+
+
+```{r, merge loan data}
+FDIC_Bham <- FDIC_matched %>%
+  mutate(FIPS = gsub("\\.","",FIPS),
+         year = as.integer(year),
+         id = paste0(State, county, FIPS), 
+         is.city = FIPS %in% city_tracts, 
+         is.lowinc = income %in% padz(seq(2,8,1),3)) %>%
+  left_join(census[[1]], by = c("id" = "GEOID"))%>% 
+  mutate(pop1990 = P0010001,
+         per.black.1990 = P0060002/P0010001,
+         per.white.1990 = P0060001/P0010001)%>%
+  select(-contains("P00"), -NAME, -geometry)%>%
+  left_join(census[[2]], by = c("id" = "GEOID"))%>% 
+  mutate(pop2000 = P003001,
+         per.black.2000 = P003004/P003001,
+         per.white.2000 = P003003/P003001)%>%
+  select(-contains("P00"), -NAME,-geometry)%>%
+  left_join(census[[3]], by = c("id" = "GEOID"))%>% 
+  mutate(pop2010 = P003001,
+         per.black.2010 = P003003/P003001,
+         per.white.2010 = P003002/P003001)%>%
+  select(-contains("P00"), -NAME,-geometry) 
+```
+
+```{r}
+map.all <- all_program %>%
+  filter(year %in% seq(2005,2016))%>%
+  group_by(GEOID,program, pop2010) %>%
+  summarise(value = sum(amt.tot, na.rm = TRUE)) %>%
+  mutate(value = value/pop2010)%>%
+  left_join(census[[3]][c("GEOID","geometry")], by = "GEOID")
+
+ggplot(map.all, aes(fill = value))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  facet_wrap(~program)+
+  # ggtitle("Per capita CRA lendings in Jefferson County, 1996 - 2017") +
+  coord_sf(datum = NA)+
+  theme(panel.grid = element_blank())
+```
+
+
+```{r prepare map data, echo = FALSE}
+map.FDIC <- FDIC_Bham %>%
+  group_by(FIPS, id, is.city, is.lowinc, 
+           per.black.1990, per.black.2000, per.black.2010,
+           pop1990, pop2000, pop2010) %>%
+  summarise(value = sum(x_tot, na.rm = TRUE)) %>%
+  mutate(value = value/pop2010,
+         level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
+  left_join(census[[3]][c("GEOID","geometry")], by = c("id" = "GEOID"))
+
+ggplot(map.FDIC, aes(fill = level))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
+                   labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
+                   name = "per capita FDIC amount") +
+  ggtitle("Per capita CRA lendings in Jefferson County, 1996 - 2017") +
+  coord_sf(datum=NA)+pthemes%+%theme(axis.title = element_blank(), axis.text = element_blank())
+```
+
+```{r}
+FDIC_Bham_alt <- FDIC_matched %>%
+  mutate(FIPS = gsub("\\.","",FIPS),
+         year = as.integer(year),
+         id = paste0(State, county, FIPS))%>%
+  left_join(tract_emp, by = c("id" = "FIPS"))%>%
+  group_by(id, C000) %>%
+  summarise(value = sum(x_tot, na.rm = TRUE)) %>%
+  mutate(value = value/C000,
+         level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
+  left_join(census[[3]][c("GEOID","geometry")], by = c("id" = "GEOID"))
+   
+p_FDICmap <- ggplot(FDIC_Bham_alt, aes(fill = level))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+  scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
+                   labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
+                   name = "per capita FDIC amount") +
+  ggtitle("Per employee CRA lendings in Jefferson County by workplace tract, 1996 - 2017") +
+  coord_sf(datum=NA)+pthemes%+%
+  theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
+
+```
+
+```{r}
+map <- tract_emp %>%
+  mutate(young = (CFA01+CFA02+CFA03+CFA04)/C000,
+         level = cut(young, breaks = c(0,0.1,0.2,0.5,1), include.lowest = TRUE)) %>%
+  left_join(census[[3]][c("GEOID","geometry")], by = c("FIPS" = "GEOID"))
+  
+
+ggplot(map, aes(fill = level))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "yellow", size = 1)+
+  scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
+                   labels = c("0 - 10%", "10 - 20%", "20 - 50%", ">50%"),
+                   name = "Share of employment\nin young firms (<10 year)") +
+  ggtitle("Startups") +
+  coord_sf()
+```
+
+
+```{r FDIC over year, fig.width=12}
+loan_size <- c("100k", "250k", "1m")
+bus_size <- c("stot","otot")
+
+FDIC_year <- FDIC_Bham %>%
+  select(year, contains("_"),contains(".")) %>%
+  mutate(n_otot = n_tot - n_stot,
+         x_otot = x_tot - x_stot) %>%
+  group_by(year, is.city, is.lowinc,
+           per.black.1990, per.black.2000, per.black.2010) %>%
+  summarise_if(is.numeric,sum, na.rm = TRUE) %>%
+  gather(variable, value, n_100k:x_otot) %>%
+  separate(variable, c("unit", "type"), sep="_") %>%
+  spread(unit, value) %>%
+  mutate(var = case_when(
+    type %in% loan_size ~ "loan_size",
+    type %in% bus_size ~ "bus_size"))
+
+FDIC_year$type <- factor(FDIC_year$type, 
+                         levels = c("100k", "250k", "1m", "otot", "stot"))
+
+ggplot(data = FDIC_year %>% filter(!is.na(var)), aes(x = year, y = x, fill = type))+
+  geom_bar(stat = "identity", position = "stack")+
+  scale_fill_discrete(labels = c("< 100k",
+                               "100 - 250k",
+                               "250k - 1M",
+                               "Other businesses",
+                               "Small businesses with\ngross annual revenues < 1M"))+
+  scale_y_continuous(labels = scales::dollar_format(scale = 0.001),
+                     name = "Total $ in Millions")+
+  facet_wrap(vars(var, is.city), labeller = label_context,nrow = 2)+
+  ggtitle("Total amount of FDIC loans in Jefferson County by year")
+
+
+
+```
+
+
+```{r FDIC city share, echo = FALSE, fig.width=10}
+FDIC_cut <- function(...){
+  FDIC_year %>% filter(!is.na(var))%>%
+  ungroup()%>%
+  group_by_("year","type","var",...)%>%
+  summarise(x = sum(x),n=sum(n))%>%
+  ungroup()%>%
+  group_by_("year","type","var")%>%
+  mutate(x = x/sum(x),
+         n = n/sum(n))%>%
+  filter_(...)
+}
+
+ggplot(data = FDIC_cut("is.city"), 
+       aes(x = year, y = x, color = type, group = type),
+       size = 5)+
+  geom_point()+
+  geom_line()+
+  scale_color_discrete(labels = c("< 100k",
+                               "100 - 250k",
+                               "250k - 1M",
+                               "Other businesses",
+                               "Small businesses with\ngross annual revenues < 1M"))+
+  scale_y_continuous(labels = scales::percent)+
+  facet_wrap(vars(var), labeller = label_context,nrow = 2)+
+  ggtitle("City of Birmingham's share of total FDIC loans in Jefferson County by year")
+
+```
+
+```{r FDIC per capita comparison, echo=FALSE, fig.width = 10}
+
+FDIC_PC_chart <- function(cut){
+FDIC_pc <- bind_rows(
+  
+FDIC_Bham %>% 
+  filter(year < 2003) %>%
+  group_by_("year", cut)%>%
+  summarise(value = 1000*sum(x_tot, na.rm = TRUE)/sum(pop1990, na.rm = TRUE)),
+FDIC_Bham %>% 
+  filter(year >= 2003 & year < 2012) %>%
+  group_by_("year", cut)%>%
+  summarise(value = 1000*sum(x_tot, na.rm = TRUE)/sum(pop2000, na.rm = TRUE)),
+FDIC_Bham %>% 
+  filter(year >= 2012) %>%
+  group_by_("year", cut)%>%
+  summarise(value = 1000*sum(x_tot, na.rm = TRUE)/sum(pop2010, na.rm = TRUE)) 
+)
+
+ggplot(FDIC_pc, aes_string(x = "year", y = "value", color = cut, group = cut))+
+  geom_point()+
+  geom_line(size = 3)+
+  scale_y_continuous(labels = scales::dollar) +
+  ggtitle("Per capita FDIC loan amount in Jefferson county")
+
+}
+
+
+```
+
+```{r, echo=FALSE, fig.width=8}
+FDIC_PC_chart("is.city")
+FDIC_PC_chart("is.lowinc")
+# FDIC_PC_chart("is.minority.1990")
+
+```
+
+
+```{r FDIC per capita comparison, by tract, echo=FALSE, fig.width=6}
+## DEPRECIATED, using number of employees as weights instead
+
+# install.packages("lazyeval")
+# library(lazyeval)
+# operation <- function(df,YEAR){
+#   df %>% 
+#     # filter_(!is.na(paste0("pop",YEAR))) %>%
+#     mutate(is.white = !!as.name(paste0("per.white.",YEAR))>0.5)%>%
+#     group_by(year, is.white) %>% 
+#     mutate_(pop = interp(~sum(var,na.rm = TRUE), var = as.name(paste0("pop",YEAR))))%>%
+#     ungroup()%>%
+#     group_by(is.white)%>%
+#     summarise(value = 1000*sum(x_tot, na.rm = TRUE),pop = mean(pop),
+#             n = n_distinct(year),
+#             min = min(year),
+#             max = max(year)) %>%
+#     mutate(value = value/pop/n,
+#            year_range = paste0(min," - ",max))
+# }
+# 
+# FDIC_pc <- function(df){bind_rows(
+# df%>% filter(year < 2003) %>% operation("1990"),
+# df%>% filter(year >= 2003 & year < 2012)%>% operation("2000"),
+# df%>% filter(year >= 2012) %>% operation("2010")
+# )}
+# 
+# FDIC_pc_t <- FDIC_Bham %>% 
+#   # filter(is.city)%>%
+#   FDIC_pc %>% arrange(year_range, is.white)
+# 
+# ggplot(FDIC_pc_t, aes(x = year_range, y = value, fill = is.white, label = scales::dollar(value)))+
+#   geom_bar(stat = "identity", position = "dodge")+
+#   scale_fill_discrete(label = c("Minority tracts", "White tracts"))+
+#   ggtitle("Annual average per capita FDIC loans by tract")+
+#   geom_text(position = position_dodge(width = 1))+
+#   labs(caption = "Demographic data is based on 1990, 2000, and 2010 Decennial Census respectively for each year range")
+```
+
+```{r, fig.width=6}
+FDIC_race <- FDIC_matched %>%
+  filter(year>=2012)%>%
+  mutate(FIPS = gsub("\\.","",FIPS),
+         year = as.integer(year),
+         id = paste0(State, county, FIPS))%>%
+  left_join(tract_emp, by = c("id" = "FIPS"))%>%
+  filter(!is.na(C000))%>%
+  summarise(w_tot = sum(x_tot)*sum(CR01/C000),
+            m_tot = sum(x_tot)*(sum((C000-CR01)/C000)),
+            w_pop = sum(CR01),
+            m_pop = sum(C000)) %>%
+  mutate(w_per = w_tot/w_pop,
+         m_per = m_tot/m_pop)%>%
+  gather(var, value, w_tot:m_per) %>%
+  separate(var, into = c("race", "var"),sep="_")
+
+p_FDIC_r <- ggplot(FDIC_race %>% filter(var == "per"), 
+       aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+  geom_bar(stat="identity")+
+  geom_text()+
+  labs(title = "Annual average per employee FDIC loans, weighted by tract level racial composition",
+      x = element_blank(),y="Per employee amount")+
+  scale_fill_manual(values = c("#0070c0", "#ffc000"),
+                    label = c("minority", "white"))+pthemes
+  
+  
+```
+
+
+```{r FDIC per capita comparison, by weighted race, echo=FALSE}
+operation_b <- function(df, YEAR){
+  df %>%
+    # filter_(!is.na(paste0("pop",YEAR)))%>%
+    mutate(value.white = x_tot * !!as.name(paste0("per.white.",YEAR)), 
+            value.minority = x_tot - value.white) %>%
+    group_by(year) %>%
+    mutate(tot.pop.white = sum(!!as.name(paste0("per.white.",YEAR))*!!as.name(paste0("pop",YEAR)), 
+                               na.rm = TRUE),
+           tot.pop.minority = sum(!!as.name(paste0("pop", YEAR)), na.rm = TRUE) - tot.pop.white) %>%
+    ungroup()%>%
+    summarise(value.white = 1000*sum(value.white, na.rm = TRUE),
+            value.minority = 1000*sum(value.minority, na.rm = TRUE),
+            tot.pop.white = mean(tot.pop.white),
+            tot.pop.minority = mean(tot.pop.minority),
+            n = n_distinct(year),
+            min = min(year),
+            max = max(year))%>%
+    mutate(value.white = value.white/tot.pop.white/n,
+           value.minority = value.minority/tot.pop.minority/n,
+           year_range = paste0(min," - ",max))
+}
+
+FDIC_pc_2 <- function(df){bind_rows(
+df %>% filter(year < 2003) %>% operation_b("1990"),
+df %>% filter(year >= 2003 & year < 2012)%>% operation_b("2000"),
+df %>% filter(year >= 2012)%>% operation_b("2010") 
+)}
+
+FDIC_pc_m <- FDIC_Bham %>%
+   # filter(is.city)%>%
+  FDIC_pc_2 %>%
+  gather(race, value, value.white:value.minority)
+
+ggplot(FDIC_pc_m, aes(x = year_range, y = value, fill = race, label = scales::dollar(value)))+
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_text(position = position_dodge(width = 1))+
+  scale_fill_discrete(label = c("Minority", "White"))+
+  ggtitle("Annual average FDIC loans weigthed by tract level racial composition")+
+  labs(caption = "Demographic data is based on 1990, 2000, and 2010 Decennial Census respectively for each year range")
+```
+
+
+```{r TLR tract, echo = FALSE}
+
+CDFI_Bham <- loan_datafiles$TLR_matched%>%filter(county14 == as.numeric(county_FIPS))%>%
+  filter(Year>=2006)%>%
+  select(Year, FIPS, gender, race,investeetype, purpose,originalamount) %>%
+  left_join(tract_emp, by = "FIPS")%>%
+  group_by(FIPS, C000) %>%
+  summarise(value = sum(originalamount, na.rm = TRUE)) %>%
+  mutate(value = value/C000,
+         level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
+  right_join(census[[3]][c("GEOID","geometry")], by = c("FIPS" = "GEOID"))
+ 
+p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+  scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
+                   labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
+                   name = "per capita CDFI amount") +
+  ggtitle("Per employee CDFI lendings in Jefferson County by workplace tract, 2006 - 2017") +
+  coord_sf(datum=NA)+pthemes%+%
+  theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
+
+
+
+
+```
+
+```{r TLR tract, echo=FALSE, fig.width=6}
+TLR_cut <- function(cut,df){
+  df %>%
+    group_by_(cut) %>%
+    summarise(amt.tot = sum(originalamount,na.rm = TRUE)) %>%
+    mutate(share = amt.tot/sum(amt.tot))
+  }
+
+
+knitr::kable(purrr::map(c("gender","race", "investeetype","Year"), TLR_cut, TLR_Bham))
+
+TLR_Bham_tract <- loan_datafiles$TLR_matched%>%filter(county14 == as.numeric(county_FIPS))%>%
+  filter(Year >=2012) %>%
+  group_by(FIPS) %>%
+  summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
+  left_join(tract_emp, by = "FIPS")%>%
+  filter(!is.na(C000))%>%
+  summarise(w_tot = sum(x_tot)*sum(CR01/C000),
+            m_tot = sum(x_tot)*(sum((C000-CR01)/C000)),
+            w_pop = sum(CR01),
+            m_pop = sum(C000)) %>%
+  mutate(w_per = w_tot/w_pop,
+         m_per = m_tot/m_pop)%>%
+  gather(var, value, w_tot:m_per) %>%
+  separate(var, into = c("race", "var"),sep="_")
+  
+p_CDFI_r <- ggplot(TLR_Bham_tract  %>% filter(var == "per"), 
+       aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+  geom_bar(stat="identity")+
+  geom_text()+
+  ggtitle("Annual average per employee CDFI loans, weighted by tract level racial composition")+
+  scale_fill_manual(values = c("#0070c0", "#ffc000"),label = c("minority", "white"))+
+  pthemes
+
+```
+
+```{r SME loans, minority, echo = FALSE}
+
+MSA_SMEloan$EXIM_matched %>%
+  summarise(amt.tot = sum(Approved.Declined.Amount),
+            sme.tot = sum(Small.Business.Authorized.Amount),
+            women.tot = sum(Woman.Owned.Authorized.Amount)) %>%
+  mutate(sme.share = sme.tot/amt.tot,
+         women.share = women.tot/amt.tot)
+
+SSTR_cut <- function(cut){MSA_SMEloan$SSTR_matched %>%
+  group_by_(cut)%>%
+  summarise(amt.tot = sum(Award.Amount, na.rm = TRUE))%>%
+  mutate(share = amt.tot/sum(amt.tot))}
+
+knitr::kable(purrr::map(c("Hubzone.Owned","Socially.and.Economically.Disadvantaged","Woman.Owned"), SSTR_cut))
+
+FDIC_year %>% filter(is.na(var))%>%
+  ungroup()%>%
+  group_by(is.minority)%>%
+  summarise(x = sum(x),
+         n = sum(n)) %>%
+  mutate(x.share = x/sum(x),
+         n.share = n/sum(n))
+
+```
 
 
 ## Talent
 
 ### Out of work population
-```{r out-of-work, echo=FALSE, fig.width=12}
+```{r out-of-work, echo=FALSE, fig.width=6}
 OoW <- datafiles$PeerCounty_OoW %>%
   filter(FIPS == county_FIPS) %>%
   gather(type, share, Young..less.educated..and.diverse:Highly.educated..high.income.older.people) %>%
@@ -379,7 +1135,7 @@ ggplot(OoW, aes(x = "", y = value, fill = type))+
 
 ### Earnings growth by education attainment
 
-```{r earning, echo = FALSE}
+```{r earning, echo = FALSE, fig.width=6}
 
 ACS_earnings <- datafiles$MSA_trend %>% 
   gather(edu, earning, B20004_001E:B20004_006E) %>%
@@ -524,8 +1280,10 @@ ggplot(movers, aes(x = "", y = share, fill = reorder(place,share))) +
   geom_bar(stat = "identity", position = "fill") +
   coord_polar("y")+
   scale_y_continuous(labels = scales::comma, name = "Share of population") +
-  ggtitle(paste0("Migration status ", countyname))+
-  scale_fill_brewer(palette = "Blues", name = "Migration status")+
+  ggtitle(paste0("Migration status in ", countyname))+
+  scale_fill_brewer(palette = "Blues", 
+                    name = "Moved from...", 
+                    labels = c("Abroad", "Other states in US", "Other counties in US", "Same counties or non-movers"))+
   theme_minimal()
 
 ```
@@ -571,26 +1329,13 @@ ggplot(migration, aes(x = place, y = value, fill = edu))+
 ```
 
 
-## Tract Maps
-```{r tract maps, echo=FALSE, include=FALSE}
-county.df <- tracts(state = st_FIPS, county = ct_FIPS)
-map.cty <- tidy(county.df, region = "GEOID")
-```
-
 ### Poverty Rate by neighbourhood
 
 ```{r poverty tract map, echo=FALSE}
-
-MSA_tractACS <- datafiles$MSA_tractACS
-
-
-MSA_tractACS$percent.below.poverty <- MSA_tractACS$B17001_002E/MSA_tractACS$B17001_001E
-MSA_tractACS$level <- cut(MSA_tractACS$percent.below.poverty,breaks = c(0,0.1,0.2,0.4,0.7), right = FALSE)
-
-map.poverty <- left_join(map.cty, MSA_tractACS[c("id","level")], by = "id")
+map.poverty <- left_join(map.cty, MSA_tractACS[c("id","poverty.level")], by = "id")
 
 ggplot() +
-  geom_polygon(data = map.poverty, aes(x = long, y = lat, group = group, fill = level), color = 'white') +
+  geom_polygon(data = map.poverty, aes(x = long, y = lat, group = group, fill = poverty.level), color = 'white') +
   scale_fill_manual(values = c("#6baed6","#d1e5f0","#fc9272","#ef3b2c","#a50f15"),
                     labels = c("0-10%", "10-20%", "20-40%", "40-70%", "NA"),
                     name = "Neighborhood poverty rates") +
@@ -604,7 +1349,7 @@ ggplot() +
 ## Infrastructure
 
 ### Housing
-```{r}
+```{r housing, echo=FALSE}
 MSA_tractACS$pop_units_ratio <- MSA_tractACS$B01003_001E/MSA_tractACS$B25024_001E
 MSA_tractACS$level <- cut(MSA_tractACS$pop_units_ratio, breaks = c(1,1.5,2,2.5,3,Inf), right = FALSE)
 
@@ -622,12 +1367,7 @@ ggplot() +
   pthemes
 ```
 
-```{r}
-
-```
-
-
-```{r ACS housing-income ratio}
+```{r ACS housing-income ratio, echo=FALSE}
 
 MSA_tractACS$house_income_ratio <- 12*MSA_tractACS$B25001_001E/MSA_tractACS$B06011_001E
 MSA_tractACS$level <- cut(MSA_tractACS$house_income_ratio, breaks = c(0,0.5,1,1.5,2), right = FALSE)
@@ -640,7 +1380,7 @@ ggplot() +
   scale_fill_manual(values = c("#6baed6","#d1e5f0","#fc9272","#ef3b2c","#a50f15"),
                     labels = c("0 - 0.5", "0.5 - 1.0", "1.0 - 1.5", "1.5 - 2.0", "NA"),
                     name = "Cost - Income ratio") +
-  ggtitle("Housing Cost / Median Income rato by census tract, 2016") +
+  ggtitle("Housing Cost / Median Income ratio by census tract, 2016") +
   coord_map() +
   labs(x=NULL, y=NULL)+
   pthemes
