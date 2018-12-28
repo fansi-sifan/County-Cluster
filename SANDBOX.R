@@ -55,6 +55,7 @@ req <- function(key, get, region, regionin, time)httr::GET(apiurl,
 
 # USPTO patent database
 
+View(fieldsdf)
 
 pkgs <- c('tidyverse','patentsview')
 
@@ -67,21 +68,34 @@ if(any(!check)){
 
 
 query <- with_qfuns(
-  and(eq(inventor_lastknown_city = "Birmingham"),
-      eq(inventor_lastknown_state = "AL"))
+  and(eq(assignee_county_fips = "73"),
+      eq(assignee_state_fips = "1"),
+      gt(patent_date = "2006-01-01"))
 )
 
 fields <- c(
-  "patent_number", "assignee_organization",
-  "patent_num_cited_by_us_patents", "app_date", "patent_date",
-  "assignee_total_num_patents"
+  "patent_number", "assignee_organization", "app_date", "patent_date",
+  "assignee_total_num_patents", "wipo_field_title","cpc_subsection_title"
 )
 
 output <- search_pv(
-  query = '{"_and":[{"inventor_lastknown_city":"Birmingham"},{"inventor_lastknown_state":"AL"}]}',
-  fields = fields)
+  query = query,endpoint = "patents",
+  fields = fields, all_pages = TRUE)
 
-unnest_pv_data(output$data, "patent_number")
+# top patent category
+t <- output$data$patents%>%unnest(wipos)
+t%>%group_by(wipo_field_title)%>%summarise(count = n())%>%arrange(desc(count))
 
+t <- output$data$patents%>%unnest(cpcs)
+t%>%group_by(cpc_subsection_title)%>%summarise(count = n())%>%arrange(desc(count))
 
-             
+# top patent assignees
+t <- output$data$patents%>%unnest(assignees)
+t%>%group_by(assignee_organization, assignee_total_num_patents)%>%summarise(count = n())%>%arrange(desc(count))
+
+# UAB categories
+query <- with_qfuns(
+  and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
+      gt(patent_date = "2016-01-01"))
+)
+
