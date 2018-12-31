@@ -103,22 +103,23 @@ export <- rbind(export_msa, setNames(export_cty, names(export_msa)))
 
 # NSF
 NSF <- bind_rows(PeerMetro_univRD %>%
-                   left_join(datafiles$Peers[c('cbsa','metro',"msapop")], by = 'cbsa') %>%
+                   left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
                    select(FIPS = cbsa,
-                          pop = msapop,
+                          emp = msaemp,
                           metro,
-                          value = RDtotal
+                          sum = RDtotal
                    ) %>%
                    mutate(HL = c(FIPS == msa_FIPS), 
-                          value = value/pop, geo = "msa"),
+                          value = sum/5/emp, geo = "msa"),
                  
                  PeerCounty_univRD %>%
-                   left_join(datafiles$Peers[c('FIPS', "county", "ctypop")], by = "FIPS")%>%
+                   left_join(datafiles$Peers[c('FIPS', "county", "ctyemp")], by = "FIPS")%>%
                    select(FIPS, 
-                          pop = ctypop, 
+                          emp = ctyemp, 
                           metro = county.y, 
-                          value = RDtotal) %>%
-                   mutate(HL = c(FIPS == county_FIPS), value = value/pop, geo = "county")
+                          sum = RDtotal) %>%
+                   mutate(HL = c(FIPS == county_FIPS), 
+                          value = sum/5/emp, geo = "county")
 )
 
 # UAB
@@ -129,7 +130,7 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
   filter(fields %in% RD_cat) %>%
   select_if(is.character) %>%
   mutate_at(vars(matches("X")), as.numeric) %>%
-  mutate(value = rowSums(.[2:6])) %>%
+  mutate(value = rowSums(.[2:6])/8) %>%
   select(-contains("X")) %>%
   rbind(c("All other fields",(.$value[1] - sum(.$value[2:4])))) %>%
   filter(fields != "All R&D fields") %>%
@@ -167,8 +168,9 @@ patentCOMP <- PeerMetro_patentCOMP %>%
 
 # VC
 VC <- PeerMetro_VC %>%
-  left_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
-  mutate(HL = c(cbsa == msa_FIPS))
+  left_join(datafiles$Peers, by = 'cbsa') %>%
+  mutate(value = value*msapop/msaemp/1000,
+         HL = c(cbsa == msa_FIPS))
 
 # firm size and age
 fsfa <- PeerMetro_fafs %>%
@@ -187,11 +189,9 @@ young <- fsfa %>%
 
 # inc5000
 I5HGC <- datafiles$PeerMetro_I5HGC %>%
-  right_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
-  select(cbsa,msaemp,
-         metro,
-         value = I5HGC_Density
-  ) %>%
+  right_join(Peers, by = 'cbsa') %>%
+  select(cbsa,msaemp,msapop,metro,I5HGC_Density) %>%
+  mutate(value = I5HGC_Density*msapop/msaemp/1000) %>%
   mutate(HL = c(cbsa == msa_FIPS))
 
 # SME loans
@@ -245,8 +245,8 @@ CDFI_Bham <- MSA_SMEloan$TLR_matched%>%
   select(Year, FIPS, gender, race,investeetype, purpose,originalamount) %>%
   left_join(tract_emp, by = "FIPS")%>%
   group_by(FIPS, C000) %>%
-  summarise(value = sum(originalamount, na.rm = TRUE)) %>%
-  mutate(value = value/C000,
+  summarise(sum = sum(originalamount, na.rm = TRUE)) %>%
+  mutate(value = sum/C000,
          level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
   right_join(census[[3]][c("GEOID","geometry")], by = c("FIPS" = "GEOID"))
 

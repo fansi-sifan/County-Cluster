@@ -1,5 +1,15 @@
+# Author: Sifan Liu
+# Date: Fri Dec 28 13:40:50 2018
+# --------------
+pkgs <- c("httr", "tidyverse", "devtools")
 
-library("httr", "tidyverse")
+check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
+if(any(!check)){
+    pkgs.missing <- pkgs[!check]
+    install.packages(pkgs.missing)
+    check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
+  } 
+
 # modify censusr package for QWI
 apiParse <- function (req) {
   if (jsonlite::validate(httr::content(req, as="text"))[1] == FALSE) {
@@ -99,3 +109,39 @@ query <- with_qfuns(
       gt(patent_date = "2016-01-01"))
 )
 
+# Federal Reporter API ======================
+library(devtools)
+install_github("muschellij2/fedreporter")
+library(fedreporter)
+res = fedreporter::fe_projects_search(
+  text = "precision medicine")
+
+length(res$content$items)
+
+install.packages("tidytext")
+library(tidyverse)
+
+term <- read.csv("source/UAB_funding terms.csv") %>% unique()
+
+data("stop_words")
+
+
+term %>% group_by(Project.Title)%>%
+  summarise(cost = sum(FY.Total.Cost, na.rm = TRUE),
+            terms = first(Project.Terms))%>%
+  mutate(text = as.character(terms))%>%
+  unnest_tokens(bigram, text, token = "ngrams", n=2)%>%
+  separate(bigram, c("word1", "word2", sep = " "))%>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(word1!="research")%>%
+  filter(word2 != "research")%>%
+  filter(!word2 %in% stop_words$word) %>%
+  unite(word, word1, word2, sep = " ") %>%
+  count(word, sort = TRUE)%>%
+  filter(n>200)%>%
+  mutate(word = reorder(word, n))%>%
+  ggplot(aes(word,n))+
+  geom_col()+
+  labs(x = NULL,title = "Frequency of key terms in all federal fundings to UAB")+
+  coord_flip()
+  

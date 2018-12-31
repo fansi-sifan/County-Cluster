@@ -113,9 +113,9 @@ MSA_opp <- readxl::read_xlsx("V:/Performance/Project files/Opportunity Industrie
   gather(type, value, `Good sub-BA jobs`:`Other jobs`)%>%
   mutate(share = value/`Total jobs`)
 
-MSA_opp$type <- factor(MSA_opp$type, levels = c("Good high-skill jobs","Good sub-BA jobs",
-                                                "Promising high-skill jobs","Promising sub-BA jobs",
-                                                "Other jobs"))
+MSA_opp$type <- factor(MSA_opp$type, levels = c(
+                                                "Other jobs","Good high-skill jobs","Good sub-BA jobs",
+                                                "Promising high-skill jobs","Promising sub-BA jobs"))
   
 
 

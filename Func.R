@@ -27,7 +27,9 @@ pthemes <- theme(rect = element_rect(fill = "D9D9D9", colour=NA),
                  legend.background = element_rect(fill = "transparent"),
                  legend.key = element_rect(fill = "transparent", color = NA),
                  legend.box.background = element_rect(fill = "transparent", colour = NA),
-                 text = element_text(size = 15), axis.text = element_text(size = 12)
+                 text = element_text(size = 15), axis.text = element_text(size = 12),
+                 axis.ticks = element_blank(),
+                 strip.text = element_blank()
 )
 
 # bar plot with title and highlights
@@ -45,20 +47,15 @@ opr <- function(df){
     group_by(Bham, program, year_range, emp.tot)%>%
     summarise(amt.tot = sum(as.numeric(amt.tot), na.rm = TRUE))%>%
     filter(!is.na(year_range))%>%
-    mutate(value = amt.tot/emp.tot)
+    mutate(value = amt.tot/emp.tot*1000)
 }
 
 p_SME <- function(df,pgm){ggplot(data = df%>%filter(program==pgm), 
                                  aes(x = year_range, y = value, fill = Bham))+
     geom_bar(stat = "identity", position = "dodge")+
-    scale_y_continuous(labels = scales::dollar_format())+
     scale_fill_manual(name = element_blank(), 
                       values = c("#0070c0", "#ffc000"), 
-                      labels = c( "Peer average", placename))+
-    labs(title = paste0("Per employee amount of ",pgm," loans to SMEs"),
-         x = element_blank(),
-         y = "Per employee loan amount")+
-    geom_text(aes(label = scales::dollar(value)), position = position_dodge(width = 1))+
-    # theme(legend.position = "bottom")+
+                      labels = c( "Peer average", paste(placename,countyname, sep = " /\n")))+
+    labs(x = NULL, y = NULL)+
     facet_wrap(~geo, nrow = 1)+pthemes}
 

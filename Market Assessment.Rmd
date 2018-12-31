@@ -8,7 +8,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library('tidyverse', 'knitr')
 source("Func.R")
-source("QWIapi.R")
+# source("QWIapi.R")
 source("V:/Sifan/R/code/ACSapi.R")
 ```
 
@@ -500,7 +500,7 @@ ggplot(data = Peer_ai,aes(x=factor(Year), y = EmpShare, color = c(Area==msa_FIPS
 
 ```{r SME loans, echo=FALSE, fig.width=10, warning=FALSE}
 
-SME_loans <- PeerCounty_SMEloans %>% ungroup()%>%
+SME_loans <- datafiles$PeerCounty_SMEloans %>% ungroup()%>%
   select(-county) %>%
   left_join(datafiles$Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
   select(FIPS,ctyemp, county, program, year_range,
