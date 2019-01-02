@@ -28,8 +28,7 @@ pthemes <- theme(rect = element_rect(fill = "D9D9D9", colour=NA),
                  legend.key = element_rect(fill = "transparent", color = NA),
                  legend.box.background = element_rect(fill = "transparent", colour = NA),
                  text = element_text(size = 15), axis.text = element_text(size = 12),
-                 axis.ticks = element_blank(),
-                 strip.text = element_blank()
+                 axis.ticks = element_blank()
 )
 
 # bar plot with title and highlights
@@ -51,7 +50,7 @@ opr <- function(df){
 }
 
 p_SME <- function(df,pgm){ggplot(data = df%>%filter(program==pgm), 
-                                 aes(x = year_range, y = value, fill = Bham))+
+                                 aes(x = year_range, y = value/5, fill = Bham))+
     geom_bar(stat = "identity", position = "dodge")+
     scale_fill_manual(name = element_blank(), 
                       values = c("#0070c0", "#ffc000"), 
