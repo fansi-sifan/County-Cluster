@@ -65,8 +65,6 @@ req <- function(key, get, region, regionin, time)httr::GET(apiurl,
 
 # USPTO patent database
 
-View(fieldsdf)
-
 pkgs <- c('tidyverse','patentsview')
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
@@ -76,16 +74,23 @@ if(any(!check)){
   check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
 
+View(fieldsdf)
 
 query <- with_qfuns(
-  and(eq(assignee_county_fips = "73"),
+  and(or(eq(assignee_county_fips = "73"),
+         eq(assignee_county_fips = "7"),
+         eq(assignee_county_fips = "9"),
+         eq(assignee_county_fips = "21"),
+         eq(assignee_county_fips = "115"),
+         eq(assignee_county_fips = "117"),
+         eq(assignee_county_fips = "112")),
       eq(assignee_state_fips = "1"),
       gt(patent_date = "2006-01-01"))
 )
 
 fields <- c(
   "patent_number", "assignee_organization", "app_date", "patent_date",
-  "assignee_total_num_patents", "wipo_field_title","cpc_subsection_title"
+  "assignee_total_num_patents", "wipo_field_title","cpc_subsection_title","wipo_sector_title"
 )
 
 output <- search_pv(
@@ -94,19 +99,27 @@ output <- search_pv(
 
 # top patent category
 t <- output$data$patents%>%unnest(wipos)
-t%>%group_by(wipo_field_title)%>%summarise(count = n())%>%arrange(desc(count))
+t%>%group_by(wipo_sector_title, wipo_field_title)%>%summarise(count = n())%>%arrange(desc(count))
 
 t <- output$data$patents%>%unnest(cpcs)
 t%>%group_by(cpc_subsection_title)%>%summarise(count = n())%>%arrange(desc(count))
 
 # top patent assignees
-t <- output$data$patents%>%unnest(assignees)
-t%>%group_by(assignee_organization, assignee_total_num_patents)%>%summarise(count = n())%>%arrange(desc(count))
+s <- output$data$patents%>%unnest(assignees)
+s%>%group_by(assignee_organization, assignee_total_num_patents)%>%summarise(count = n())%>%arrange(desc(count))
 
+pat_top <- t%>%left_join(s, by = "patent_number")%>%group_by(wipo_field_title,assignee_organization)%>%summarise(count = n())%>% arrange(desc(count))
 # UAB categories
 query <- with_qfuns(
   and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
       gt(patent_date = "2016-01-01"))
+)
+
+
+query <- with_qfuns(
+  and(eq(assignee_county_fips = "7"),
+      eq(assignee_state_fips = "1"),
+      gt(patent_date = "2006-01-01"))
 )
 
 # Federal Reporter API ======================
