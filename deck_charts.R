@@ -105,7 +105,7 @@ p_opp <- ggplot(MSA_opp, aes(x = factor(Traded), y = share, fill = type))+
 
 # EXIM
 p_EXIM <- p_SME(SMEloans, "EXIM")+
-  ggtitle("Average annual EXIM loans (thousand) per 1000 worker")+
+  ggtitle("Annual average loans from Export-Import Bank per 1000 workers")+
   scale_y_continuous(labels = scales::dollar_format(scale = 0.001))
 
 
@@ -173,24 +173,37 @@ p_inc<- bar_plot(I5HGC, "Number of Inc5000 high growth companies per 1000 worker
 
 # FDIC
 p_FDIC <- p_SME(SMEloans, "FDIC")+
-  ggtitle("Annual average FDIC loans (million) per 1000 worker")+
+  ggtitle("Annual average loans from private FDIC-insured banks (million) per 1000 workers")+
   scale_y_continuous(labels = scales::dollar_format(scale = 0.000001))
 
 
+# p_FDIC_r <- ggplot(FDIC_race %>% filter(var == "per"), 
+#                    aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+#   geom_bar(stat="identity")+
+#   geom_text()+
+#   labs(title = "Annual average per employee FDIC loans, weighted by tract level racial composition",
+#        x = element_blank(),y="Per employee amount")+
+#   scale_fill_manual(values = c("#0070c0", "#ffc000"),
+#                     label = c("minority", "white"))+pthemes
 
-p_FDIC_r <- ggplot(FDIC_race %>% filter(var == "per"), 
-                   aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+p_FDIC_r <- ggplot(FDIC_Bham_tract,
+                   aes(x = is.white, y = value, fill = is.white, label = scales::dollar(value)))+
   geom_bar(stat="identity")+
-  geom_text()+
-  labs(title = "Annual average per employee FDIC loans, weighted by tract level racial composition",
-       x = element_blank(),y="Per employee amount")+
-  scale_fill_manual(values = c("#0070c0", "#ffc000"),
-                    label = c("minority", "white"))+pthemes
+  # geom_text(position = position_nudge(y=1))+
+  ggtitle("Per 1000 workers FDIC loans (million), 1996 - 2017")+
+  scale_fill_manual(name = NULL,
+                    values = c("#0070c0", "#ffc000"),
+                    label = c("share of white workers < 50%", 
+                              "share of white workers >= 50%"))+
+  scale_y_continuous(labels = scales::dollar)+
+  labs(x=NULL, y = NULL)+
+  pthemes%+%
+  theme(axis.text.x = element_blank())
 
 
 # CDFI 
 p_CDFI <- p_SME(SMEloans, "CDFI")+
-  ggtitle("Annual average CDFI loans (thousand) per 1000 worker")+
+  ggtitle("Annual average CDFI loans per 1000 workers")+
   scale_y_continuous(labels = scales::dollar_format(scale = 0.001))
 
 p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
@@ -203,22 +216,36 @@ p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
   coord_sf(datum=NA)+pthemes%+%
   theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
 
-ggplot(CDFI_Bham, aes(fill = sum/1000))+
+ggplot(CDFI_Bham, aes(fill = sum/1000000))+
   geom_sf()+
   geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
-  scale_fill_gradient(low = "#bdd7e7", high = "#08519c")+
+  scale_fill_gradient(name = "Amount (million)",low = "#bdd7e7", high = "#08519c")+
   # scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
   #                   labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
   #                   name = "per capita CDFI amount") +
   # ggtitle("Per employee CDFI lendings in Jefferson County by workplace tract, 2006 - 2017") +
   coord_sf(datum=NA)+
-  # pthemes%+%
+  pthemes%+%
   theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
 
-p_CDFI_r <- ggplot(TLR_Bham_tract  %>% filter(var == "per"), 
-                   aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+# p_CDFI_r <- ggplot(TLR_Bham_weight  %>% filter(var == "per"), 
+#                    aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
+#   geom_bar(stat="identity")+
+#   geom_text()+
+#   ggtitle("Annual average per employee CDFI loans, weighted by tract level racial composition")+
+#   scale_fill_manual(values = c("#0070c0", "#ffc000"),label = c("minority", "white"))+
+#   pthemes
+
+p_CDFI_r <- ggplot(TLR_Bham_tract,
+                   aes(x = is.white, y = value, fill = is.white, label = scales::dollar(value)))+
   geom_bar(stat="identity")+
-  geom_text()+
-  ggtitle("Annual average per employee CDFI loans, weighted by tract level racial composition")+
-  scale_fill_manual(values = c("#0070c0", "#ffc000"),label = c("minority", "white"))+
-  pthemes
+  # geom_text(position = position_nudge(y=1))+
+  ggtitle("Per 1000 workders CDFI loans, 2006 - 2017")+
+  scale_fill_manual(name = NULL,
+                    values = c("#0070c0", "#ffc000"),
+                    label = c("share of white workers < 50%", 
+                              "share of white workers >= 50%"))+
+  scale_y_continuous(labels = scales::dollar)+
+  labs(x=NULL, y = NULL)+
+  pthemes%+%
+  theme(axis.text.x = element_blank())

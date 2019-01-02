@@ -238,6 +238,21 @@ FDIC_race <- MSA_SMEloan$FDIC_matched %>%
   gather(var, value, w_tot:m_per) %>%
   separate(var, into = c("race", "var"),sep="_")
 
+FDIC_Bham_tract <- MSA_SMEloan$FDIC_matched %>%
+  # filter(year>=2012)%>%
+  mutate(FIPS = gsub("\\.","",FIPS),
+         year = as.integer(year),
+         id = paste0(State, county, FIPS))%>%
+  group_by(id, year)%>%
+  summarise(x_tot = sum(x_tot, na.rm = TRUE))%>%
+  left_join(tract_emp, by = c("id" = "FIPS"))%>%
+  filter(!is.na(C000))%>%
+  mutate(is.white = (CR01/C000>0.5))%>%
+  group_by(is.white, year)%>%
+  summarise(emp = sum(C000, na.rm = TRUE),
+            x_tot = sum(x_tot, na.rm = TRUE))%>%
+  mutate(value = x_tot/emp)
+
 # CDFI
 # MAP
 CDFI_Bham <- MSA_SMEloan$TLR_matched%>%
@@ -252,7 +267,7 @@ CDFI_Bham <- MSA_SMEloan$TLR_matched%>%
 
 
 # race
-TLR_Bham_tract <- MSA_SMEloan$TLR_matched%>%
+TLR_Bham_weight <- MSA_SMEloan$TLR_matched%>%
   filter(Year >=2012) %>%
   group_by(FIPS) %>%
   summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
@@ -266,3 +281,15 @@ TLR_Bham_tract <- MSA_SMEloan$TLR_matched%>%
          m_per = m_tot/m_pop)%>%
   gather(var, value, w_tot:m_per) %>%
   separate(var, into = c("race", "var"),sep="_")
+
+TLR_Bham_tract <- MSA_SMEloan$TLR_matched%>%
+  # filter(Year >=2012) %>%
+  group_by(FIPS) %>%
+  summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
+  right_join(tract_emp[c("FIPS","C000","CR01")], by = "FIPS")%>%
+  filter(!is.na(C000))%>%
+  mutate(is.white = (CR01/C000>0.5))%>%
+  group_by(is.white)%>%
+  summarise(emp = sum(C000),
+            x_tot = sum(x_tot, na.rm = TRUE))%>%
+  mutate(value = x_tot/emp)
