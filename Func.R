@@ -33,7 +33,7 @@ pthemes <- theme(rect = element_rect(fill = "D9D9D9", colour=NA),
 
 # bar plot with title and highlights
 bar_plot <- function(df,title, HL){
-  ggplot(df, aes(x = reorder(metro,value), y = value, fill = HL))+
+  ggplot(df %>% filter(!is.na(value)), aes(x = reorder(metro,value), y = value, fill = HL))+
     geom_bar(stat = "identity")+
     coord_flip()+
     labs(title = title, x = NULL,y = NULL)+
