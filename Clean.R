@@ -215,16 +215,68 @@ names(MSA_univRD) <- NSF_fice
 
 
 # AUTM ======================================================
-AUTM <- read.csv("source/AUTM.csv")
-add <- AUTM %>% 
-  # arrange(desc(YEAR))%>%
-  select(X.ID., INSTITUTION, STATE, INSTTYPE)%>%
-  filter(INSTTYPE=="5U")%>%
-  unique()%>%
-  group_by(X.ID.)%>%
-  slice(1)
+AUTM <- read.csv("source/AUTM.csv") 
 
 
+# geocoding ---------------------------
+
+# add <- AUTM %>% 
+#   # arrange(desc(YEAR))%>%
+#   select(X.ID., INSTITUTION, STATE, INSTTYPE)%>%
+#   filter(INSTTYPE=="5U")%>%
+#   unique()%>%
+#   group_by(X.ID.)%>%
+#   slice(1)
+
+# add2FIPS("Albert Einstein College of Med/Yeshiva University, NY", KEY)
+
+# add <- add %>%
+#   mutate(add = paste(INSTITUTION,STATE, sep = ","))
+# 
+# for(i in 1:nrow(add)){
+#   add$FIPS[[i]] <- add2FIPS(add$add[[i]],KEY)
+# }
+# 
+# for(i in which(is.na(add$FIPS))){
+#   add$FIPS[[i]] <- add2FIPS("University of Utah, UT",KEY)
+# }
+
+# AUTM <- AUTM %>% 
+#   select(-contains("INSTITUTION"), -contains("STATE"),-contains("INSTTYPE"))%>%
+#   left_join(add[c("X.ID.", "FIPS")], by = "X.ID.")
+# 
+# AUTM <- AUTM %>% mutate(FIPS = substr(FIPS.y, 1,5))
+# 
+# write.csv(AUTM, "source/AUTM.csv")
+
+# analysis --------------------------------
+# convert dollar to numeric
+Peer_AUTM <- AUTM %>% 
+  group_by(FIPS)%>%
+  # summarise_if(is.numeric, sum, na.rm = TRUE) %>%
+  summarise(tot_lic = sum(Lic.Iss,na.rm = TRUE)+sum(Opt.Iss,na.rm = TRUE),
+            lg_lic = sum(Tot.Lic.Lg.Co,na.rm = TRUE),
+            sm_lic = sum(Tot.Lic.Sm.Co,na.rm = TRUE),
+            st_lic = sum(Tot.Lic.St.Ups,na.rm = TRUE),
+            inc_lic = sum(Gross.Lic.Inc,na.rm = TRUE),
+            tot_IP = sum(Inv.Dis.Rec,na.rm = TRUE),
+            tot_st = sum(St.Ups.Formed,na.rm = TRUE),
+            instate_st = sum(St.Ups.in.Home.St,na.rm = TRUE))%>%
+  mutate(FIPS = padz(as.character(FIPS), 5)) %>%
+  inner_join(msa_ct_FIPS, by = "FIPS")
+
+Peer_AUTM <- bind_rows(
+  Peer_AUTM %>%
+    filter(FIPS%in%Peers$FIPS)%>%
+    mutate(instate_share = instate_st/tot_st,
+           geo = "County"),
+  
+  Peer_AUTM %>%
+    group_by(cbsa, metro) %>%
+    summarise_if(is.numeric, sum, na.rm = TRUE)%>%
+    mutate(instate_share = instate_st/tot_st,
+           geo = "MSA")
+)
 
 # REGPAT =====================================================
 # PeerMetro_REGPAT <- readxl::read_xlsx("V:/Global Profiles/Data/REGPAT/Analysis Files/_g4.xlsx", sheet = "i0") %>%
@@ -505,7 +557,7 @@ MSA_SMEloan$SSTR_matched  <- MSA_SMEloan$SSTR_matched %>%
 
 source("V:/Sifan/R/code/add2FIPS.R")
 
-add2FIPS("400 Riverhill Business Park, Birmingham, AL", key)
+# add2FIPS("Albert Einstein College of Med/Yeshiva University, NY", KEY)
 
 # address_unmatched <- address_unmatched %>%
 #   mutate(add = paste(street,city,state, sep = ","))
@@ -541,7 +593,7 @@ CBP_Bham <- CBP %>%
 # SAVE OUTPUT ---------------------------------------------------
 dfs <- objects()
 # datafiles <- mget(dfs[grep("Peer|MSA|labels", dfs)])
-new <- mget(dfs[grep("MSA_ss", dfs)])
+new <- mget(dfs[grep("Peer_AUTM", dfs)])
 datafiles <- gdata::update.list(datafiles, new)
 
 # save(datafiles, file = paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))

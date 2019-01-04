@@ -136,6 +136,21 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
   filter(fields != "All R&D fields") %>%
   mutate(value = as.numeric(value))
 
+# AUTM
+
+Peer_AUTM <- bind_rows(
+  Peer_AUTM %>%
+    left_join(Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
+    mutate(value = inc_lic/ctyemp*1000,
+           geo = "County"),
+  Peer_AUTM %>%
+    group_by(cbsa, metro) %>%
+    left_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+    summarise_if(is.numeric, sum, na.rm = TRUE)%>%
+    mutate(value = inc_lic/msaemp*1000,
+           geo = "MSA")
+)
+
 # USPTO
 patent_cty <- PeerCounty_USPTO %>%
   left_join(Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
