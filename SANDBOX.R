@@ -10,7 +10,7 @@ if(any(!check)){
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
   } 
 
-# modify censusr package for QWI
+# modify censusr package for QWI queries ===========================================
 apiParse <- function (req) {
   if (jsonlite::validate(httr::content(req, as="text"))[1] == FALSE) {
     error_message <- (gsub("<[^>]*>", "", httr::content(req, as="text")))
@@ -63,7 +63,7 @@ req <- function(key, get, region, regionin, time)httr::GET(apiurl,
                                                                         firmage=1,firmage=2,firmage=3,firmage=4,firmage=5))
 
 
-# USPTO patent database
+# USPTO patent database ====================================================================
 
 pkgs <- c('tidyverse','patentsview')
 
@@ -76,6 +76,13 @@ if(any(!check)){
 
 View(fieldsdf)
 
+# UAB -------------------------------
+query <- with_qfuns(
+  and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
+      gt(patent_date = "2016-01-01"))
+)
+
+# Bham MSA 7 counties -------------------------------
 query <- with_qfuns(
   and(or(eq(assignee_county_fips = "73"),
          eq(assignee_county_fips = "7"),
@@ -88,39 +95,49 @@ query <- with_qfuns(
       gt(patent_date = "2006-01-01"))
 )
 
+# fields -------------------------------
 fields <- c(
-  "patent_number", "assignee_organization", "app_date", "patent_date",
-  "assignee_total_num_patents", "wipo_field_title","cpc_subsection_title","wipo_sector_title"
-)
+  "patent_number", "assignee_organization", "patent_date",
+  "assignee_total_num_patents", "wipo_field_title","wipo_sector_title",
+  "cpc_subsection_title","cpc_group_title", "cpc_sub_group_title",
+  "nber_subcategory_title")
 
 output <- search_pv(
   query = query,endpoint = "patents",
   fields = fields, all_pages = TRUE)
 
+# results -------------------------------
 # top patent category
-t <- output$data$patents%>%unnest(wipos)
-t%>%group_by(wipo_sector_title, wipo_field_title)%>%summarise(count = n())%>%arrange(desc(count))
+output$data$patents%>%unnest(wipos)%>%
+  group_by(wipo_sector_title, wipo_field_title)%>%
+  summarise(count = n())%>%
+  arrange(desc(count))
 
-t <- output$data$patents%>%unnest(cpcs)
-t%>%group_by(cpc_subsection_title)%>%summarise(count = n())%>%arrange(desc(count))
+output$data$patents%>%unnest(cpcs)%>%
+  group_by(cpc_subgroup_title)%>%
+  summarise(count = n())%>%
+  arrange(desc(count))
+
+output$data$patents%>%unnest(nbers)%>%
+  group_by(nber_subcategory_title)%>%
+  summarise(count = n())%>%
+  arrange(desc(count))
+
+output$data$patents%>%unnest(uspcs)%>%
+  group_by(uspc_subclass_title)%>%
+  summarise(count = n())%>%
+  arrange(desc(count))
 
 # top patent assignees
 s <- output$data$patents%>%unnest(assignees)
 s%>%group_by(assignee_organization, assignee_total_num_patents)%>%summarise(count = n())%>%arrange(desc(count))
 
-pat_top <- t%>%left_join(s, by = "patent_number")%>%group_by(wipo_field_title,assignee_organization)%>%summarise(count = n())%>% arrange(desc(count))
-# UAB categories
-query <- with_qfuns(
-  and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
-      gt(patent_date = "2016-01-01"))
-)
+t <- output$data$patents%>%unnest(wipos)
+pat_top <- t%>%left_join(s, by = "patent_number")%>%
+  group_by(wipo_field_title,assignee_organization)%>%
+  summarise(count = n())%>% 
+  arrange(desc(count))
 
-
-query <- with_qfuns(
-  and(eq(assignee_county_fips = "7"),
-      eq(assignee_state_fips = "1"),
-      gt(patent_date = "2006-01-01"))
-)
 
 # Federal Reporter API ======================
 library(devtools)
@@ -158,3 +175,4 @@ term %>% group_by(Project.Title)%>%
   labs(x = NULL,title = "Frequency of key terms in all federal fundings to UAB")+
   coord_flip()
   
+
