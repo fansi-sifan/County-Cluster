@@ -214,6 +214,18 @@ MSA_univRD <- lapply(url, function(x){
 names(MSA_univRD) <- NSF_fice
 
 
+# AUTM ======================================================
+AUTM <- read.csv("source/AUTM.csv")
+add <- AUTM %>% 
+  # arrange(desc(YEAR))%>%
+  select(X.ID., INSTITUTION, STATE, INSTTYPE)%>%
+  filter(INSTTYPE=="5U")%>%
+  unique()%>%
+  group_by(X.ID.)%>%
+  slice(1)
+
+
+
 # REGPAT =====================================================
 # PeerMetro_REGPAT <- readxl::read_xlsx("V:/Global Profiles/Data/REGPAT/Analysis Files/_g4.xlsx", sheet = "i0") %>%
 #   filter(`Year Range` == "2008-2012") %>%
@@ -492,8 +504,8 @@ MSA_SMEloan$SSTR_matched  <- MSA_SMEloan$SSTR_matched %>%
 
 
 source("V:/Sifan/R/code/add2FIPS.R")
-key <- "AIzaSyCRrXDCQJXMC9bvBiEFtIPeOLiBDXvqFRY"
-# add2FIPS("400 Riverhill Business Park, Birmingham, AL", key)
+
+add2FIPS("400 Riverhill Business Park, Birmingham, AL", key)
 
 # address_unmatched <- address_unmatched %>%
 #   mutate(add = paste(street,city,state, sep = ","))

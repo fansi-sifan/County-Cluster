@@ -41,7 +41,7 @@ new_slides("Business receive less export financing in Birmingham and Jefferson C
 
 #innovation
 new_slides("Local universities are an incredible research asset", p_RDuni)
-new_slides("R&D dominated by health sciences and biomedical sciences", p_UAB)
+new_slides("R&D dominated by health sciences and biomedical sciences", p_UAB_donut)
 new_slides("But research spend is not translating into commercialization", p_USPTO)
 new_slides("Top patenting activities in Birmingham concentrate in life sciences and advanced manufacturing")
 new_slides("A second challenge is that Birmingham has low levels of technological complexity", p_pci)

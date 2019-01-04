@@ -110,34 +110,65 @@ p_EXIM <- p_SME(SMEloans, "EXIM")+
 
 
 # university R&D
-p_RDuni <- bar_plot(NSF, "Average annual R&D expenditure (thousand) at higher education institution per 1000 workers, 2012 - 2016", HL)+
+p_RDuni <- bar_plot(NSF, "Average annual R&D expenditure (thousand) at higher education institutions\nper 1000 workers, 2012 - 2016", HL)+
   scale_y_continuous(labels = scales::dollar_format(scale = 1000)) +
   # labs(x = "($ per capita)",y = element_blank())+
-  facet_wrap(~geo, scales = "free_y")+pthemes
+  facet_wrap(~geo, scales = "free_y")+pthemes%+%theme(strip.text = element_blank())
 
 # UAB funding
 myorder <- c("All other fields", "Engineering", "Life sciences, nec","Biological and biomedical sciences", "Health sciences")
+UAB_RD$fields <- factor(UAB_RD$fields, levels = myorder)
+UAB_RD$value_adj = scales::dollar(UAB_RD$value, scale = 0.001,accuracy = 1)
 
-p_UAB <- ggplot(UAB_RD, aes(x = fields, y = value/1000, fill = fields, label = fields)) +
-  geom_bar(stat = "identity", position = "stack") +
+p_UAB <- ggplot(UAB_RD, aes(x ="", y = value/1000, fill = fields, label = fields)) +
+  geom_bar(width = 1,stat = "identity") +
   scale_y_continuous(labels = scales::dollar)+
-  labs(x = NULL, y = NULL,title = paste0("Average annual R&D expenditure (million) at UAB, FY2012 - 2016"))+
-  scale_x_discrete(limits = myorder)+
-  scale_fill_manual(values = c("Biological and biomedical sciences" = "#2166ac", 
+  labs(x = NULL, y = NULL,title = paste0("Average annual R&D expenditure (million) at UAB, 2009 - 2016"))+
+  # scale_x_discrete(limits = myorder)+
+  scale_fill_manual(limits = myorder,
+                    values = c("Biological and biomedical sciences" = "#2166ac", 
                                "Health sciences" = "#67a9cf", 
                                "Life sciences, nec" = "#d1e5f0",
                                "Engineering" = "#fddbc7", 
                                "All other fields" = "#ef8a62"),
-                    labels = c("Life sciences, nec" = "All other life sciences"),
                     guide = FALSE)+
-  coord_flip()+pthemes
+  coord_polar("y")+pthemes
+
+p_UAB_donut <- ggpar(ggdonutchart(UAB_RD, "value", label= "value_adj",
+                                  fill = "fields",color = "#D9D9D9"),
+                     palette = c("#797171","#ffd966", "#d1e5f0", "#0070c0", "#003249"),
+                     legend = "right", ticks = FALSE,
+                     title = "Average annual R&D expenditure (million) at UAB, 2007 - 2016")+
+  pthemes%+%theme(legend.title = element_blank())
+
+# AUTM
+
+p_AUTM <- bar_plot(AUTM %>% filter(!is.na(value)), "Average annual licensing income per 1000 workers, 2006 - 2017", HL)+
+  scale_y_continuous(labels = scales::dollar)+
+  facet_wrap(~geo, scales = "free_y")+pthemes+
+  pthemes%+%theme(strip.text = element_blank())
+
+p_startup <- ggplot(startup %>% filter(!is.na(tot_st)), 
+                    aes(x=reorder(metro,tot_st/msaemp), y = value_p, fill = HL, alpha = reorder(type, value_p)))+
+  geom_bar(stat = "identity", position = "stack")+
+  scale_fill_manual(name = NULL,
+                    values = c("#0070c0", "#ffc000"),
+                    label = c( "Peer average", paste(placename,countyname, sep = " /\n")))+
+  scale_alpha_manual(name = NULL,
+                     values = c(0.5,1),
+                     label = c("Out of state","In state"))+
+  coord_flip()+
+  labs(title = "Start-ups per 1000 workers launched at universities, 2006 - 2017", x=NULL, y = NULL)+
+  facet_wrap(~geo, scales = "free_y")+
+  pthemes%+%theme(strip.text = element_blank())
 
 
 # USPTO
 
 p_USPTO <- bar_plot(patent, "Total number of USPTO patents per 1000 workers, 2000 - 2015", HL)+
   scale_y_continuous(labels = scales::comma)+
-  facet_wrap(~geo, scales = "free_y")+pthemes
+  facet_wrap(~geo, scales = "free_y")+pthemes+
+  pthemes%+%theme(strip.text = element_blank())
 
 # patent complexity
 p_pci<- bar_plot(patentCOMP, "Metro knowledge complexity scores, 2000 - 2004", HL)+pthemes
