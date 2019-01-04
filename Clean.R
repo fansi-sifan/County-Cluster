@@ -263,20 +263,8 @@ Peer_AUTM <- AUTM %>%
             tot_st = sum(St.Ups.Formed,na.rm = TRUE),
             instate_st = sum(St.Ups.in.Home.St,na.rm = TRUE))%>%
   mutate(FIPS = padz(as.character(FIPS), 5)) %>%
-  inner_join(msa_ct_FIPS, by = "FIPS")
+  inner_join(msa_ct_FIPS[c("FIPS","cbsa")], by = "FIPS")
 
-Peer_AUTM <- bind_rows(
-  Peer_AUTM %>%
-    filter(FIPS%in%Peers$FIPS)%>%
-    mutate(instate_share = instate_st/tot_st,
-           geo = "County"),
-  
-  Peer_AUTM %>%
-    group_by(cbsa, metro) %>%
-    summarise_if(is.numeric, sum, na.rm = TRUE)%>%
-    mutate(instate_share = instate_st/tot_st,
-           geo = "MSA")
-)
 
 # REGPAT =====================================================
 # PeerMetro_REGPAT <- readxl::read_xlsx("V:/Global Profiles/Data/REGPAT/Analysis Files/_g4.xlsx", sheet = "i0") %>%

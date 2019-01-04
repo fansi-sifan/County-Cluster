@@ -130,7 +130,7 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
   filter(fields %in% RD_cat) %>%
   select_if(is.character) %>%
   mutate_at(vars(matches("X")), as.numeric) %>%
-  mutate(value = rowSums(.[2:6])/8) %>%
+  mutate(value = rowSums(.[2:6])/10) %>%
   select(-contains("X")) %>%
   rbind(c("All other fields",(.$value[1] - sum(.$value[2:4])))) %>%
   filter(fields != "All R&D fields") %>%
@@ -138,18 +138,27 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
 
 # AUTM
 
-Peer_AUTM <- bind_rows(
+AUTM <- bind_rows(
   Peer_AUTM %>%
-    left_join(Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
-    mutate(value = inc_lic/ctyemp*1000,
-           geo = "County"),
+    inner_join(Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
+    mutate(HL = c(FIPS == county_FIPS),
+           value = inc_lic/12/ctyemp*1000,
+           geo = "County")%>%
+    rename(metro = county,msaemp = ctyemp),
   Peer_AUTM %>%
-    group_by(cbsa, metro) %>%
-    left_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+    group_by(cbsa) %>%
     summarise_if(is.numeric, sum, na.rm = TRUE)%>%
-    mutate(value = inc_lic/msaemp*1000,
+    inner_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+    mutate(HL = c(cbsa == msa_FIPS),
+           value = inc_lic/12/msaemp*1000,
            geo = "MSA")
 )
+
+startup <- AUTM %>%
+  select(metro, HL, msaemp,geo,tot_st,instate_st) %>%
+  mutate(outstate_st = tot_st-instate_st)%>%
+  gather(type, value, instate_st:outstate_st)%>%
+  mutate(value_p = value/msaemp*1000)
 
 # USPTO
 patent_cty <- PeerCounty_USPTO %>%
