@@ -10,6 +10,23 @@ if(any(!check)){
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
   } 
 
+# opportunity index HUD =============================================
+# source: https://www.cbpp.org/research/housing/interactive-map-where-voucher-households-live-in-the-50-largest-metropolitan-areas
+
+# read json data---------------------------------------------------
+URL <- "https://apps.cbpp.org/4-16-18hous/data/13820.json" 
+raw <- jsonlite::fromJSON(URL, simplifyVector = TRUE) 
+# clean---------------------------------------------------
+t <- raw %>%
+  bind_rows()%>%
+  t()%>%
+  as_tibble()%>%
+  mutate(FIPS = names(raw)) %>%
+  rename(CBSA = V1, pov_rate = V2, pov_bkt = V3, opp_index = V5, color_share = V6)
+
+t%>%filter(FIPS=="1073010602")
+
+
 # modify censusr package for QWI queries ===========================================
 apiParse <- function (req) {
   if (jsonlite::validate(httr::content(req, as="text"))[1] == FALSE) {
