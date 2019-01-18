@@ -91,7 +91,7 @@ export_cty <- PeerCounty_export %>%
   select(FIPS, `County Name (BEA)`, 
          value = `Export Share of GDP (%), by All-Industries (County)`)%>%
   mutate(HL = c(FIPS == county_FIPS),
-         geo = "county")
+         geo = "County")
 export_msa <- PeerMetro_export %>%
   select(cbsa,
          metro = `CBSA Short Name (2013)`, 
@@ -137,9 +137,8 @@ UAB_RD <- datafiles$MSA_univRD$`1052` %>%
   mutate(value = as.numeric(value))
 
 # AUTM
-
 AUTM <- bind_rows(
-  Peer_AUTM %>%
+  Peer_AUTM %>% 
     inner_join(Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
     mutate(HL = c(FIPS == county_FIPS),
            value = inc_lic/12/ctyemp*1000,
@@ -154,11 +153,17 @@ AUTM <- bind_rows(
            geo = "MSA")
 )
 
-startup <- AUTM %>%
+# university startups
+uni_startup <- AUTM %>%
   select(metro, HL, msaemp,geo,tot_st,instate_st) %>%
   mutate(outstate_st = tot_st-instate_st)%>%
   gather(type, value, instate_st:outstate_st)%>%
   mutate(value_p = value/msaemp*1000)
+
+# startcups
+startup <- Peer_crunchbase%>%
+  mutate(HL = c(cbsa==msa_FIPS),
+         value = count/msaemp*1000)
 
 # USPTO
 patent_cty <- PeerCounty_USPTO %>%
@@ -193,7 +198,7 @@ patentCOMP <- PeerMetro_patentCOMP %>%
 # VC
 VC <- PeerMetro_VC %>%
   left_join(datafiles$Peers, by = 'cbsa') %>%
-  mutate(value = value*msapop/msaemp/1000,
+  mutate(value = value*msapop/msaemp*1000,
          HL = c(cbsa == msa_FIPS))
 
 # firm size and age
@@ -220,18 +225,20 @@ I5HGC <- datafiles$PeerMetro_I5HGC %>%
 
 # SME loans
 SMEloans <- bind_rows(PeerMetro_SMEloans %>%
-                    right_join(datafiles$Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+                    right_join(Peer_traded, by = c('cbsa'='FIPS')) %>%
                     group_by(Bham = (cbsa == msa_FIPS),year_range,program) %>%
-                    mutate(emp.tot = sum(msaemp, na.rm = TRUE))%>%
+                    mutate(emp.traded = sum(Emp, na.rm = TRUE),
+                           emp.tot = sum(Emptot, na.rm = TRUE))%>%
                     opr()%>%
                     mutate(geo = "MSA"),
                   
                   PeerCounty_SMEloans %>%
-                    right_join(datafiles$Peers[c("FIPS", "county", "ctyemp")], by = "FIPS")%>%
+                    right_join(Peer_traded, by = "FIPS")%>%
                     group_by(Bham = (FIPS == county_FIPS),year_range,program) %>%
-                    mutate(emp.tot = sum(ctyemp, na.rm = TRUE))%>%
+                    mutate(emp.traded = sum(Emp, na.rm = TRUE),
+                           emp.tot = sum(Emptot, na.rm = TRUE))%>%
                     opr()%>%
-                    mutate(geo = "county"))
+                    mutate(geo = "County"))
 # FDIC
 # map
 FDIC_Bham_alt <- MSA_SMEloan$FDIC_matched %>%
@@ -241,8 +248,9 @@ FDIC_Bham_alt <- MSA_SMEloan$FDIC_matched %>%
   left_join(tract_emp, by = c("id" = "FIPS"))%>%
   group_by(id, C000) %>%
   summarise(value = sum(x_tot, na.rm = TRUE)) %>%
-  mutate(value = value/C000,
-         level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
+  # annual average, 1996 - 2017
+  mutate(value = value/C000/22,
+         level = cut(value, breaks = c(0,1,5,10,Inf), include.lowest = TRUE))%>%
   left_join(census[[3]][c("GEOID","geometry")], by = c("id" = "GEOID"))
 
 # race
@@ -253,29 +261,33 @@ FDIC_race <- MSA_SMEloan$FDIC_matched %>%
          id = paste0(State, county, FIPS))%>%
   left_join(tract_emp, by = c("id" = "FIPS"))%>%
   filter(!is.na(C000))%>%
-  summarise(w_tot = sum(x_tot)*sum(CR01/C000),
-            m_tot = sum(x_tot)*(sum((C000-CR01)/C000)),
+  summarise(w_tot = sum(x_tot*(CR01/C000)),
+            m_tot = sum(x_tot*((C000-CR01)/C000)),
             w_pop = sum(CR01),
             m_pop = sum(C000)) %>%
   mutate(w_per = w_tot/w_pop,
-         m_per = m_tot/m_pop)%>%
-  gather(var, value, w_tot:m_per) %>%
-  separate(var, into = c("race", "var"),sep="_")
+         m_per = m_tot/m_pop,
+         tot_w = w_tot/(w_tot+m_tot),
+         pop_w = w_pop/(w_pop+m_pop))
+# %>%
+#   gather(var, value, w_tot:m_per) %>%
+#   separate(var, into = c("race", "var"),sep="_")
 
 FDIC_Bham_tract <- MSA_SMEloan$FDIC_matched %>%
   # filter(year>=2012)%>%
   mutate(FIPS = gsub("\\.","",FIPS),
          year = as.integer(year),
          id = paste0(State, county, FIPS))%>%
-  group_by(id, year)%>%
+  group_by(id)%>%
   summarise(x_tot = sum(x_tot, na.rm = TRUE))%>%
   left_join(tract_emp, by = c("id" = "FIPS"))%>%
   filter(!is.na(C000))%>%
   mutate(is.white = (CR01/C000>0.5))%>%
-  group_by(is.white, year)%>%
+  group_by(is.white)%>%
   summarise(emp = sum(C000, na.rm = TRUE),
             x_tot = sum(x_tot, na.rm = TRUE))%>%
-  mutate(value = x_tot/emp)
+  mutate(value = x_tot/emp/22)
+
 
 # CDFI
 # MAP
@@ -285,7 +297,8 @@ CDFI_Bham <- MSA_SMEloan$TLR_matched%>%
   left_join(tract_emp, by = "FIPS")%>%
   group_by(FIPS, C000) %>%
   summarise(sum = sum(originalamount, na.rm = TRUE)) %>%
-  mutate(value = sum/C000,
+  #annual average, 2006 - 2017
+  mutate(value = sum/C000/12,
          level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
   right_join(census[[3]][c("GEOID","geometry")], by = c("FIPS" = "GEOID"))
 
@@ -297,23 +310,27 @@ TLR_Bham_weight <- MSA_SMEloan$TLR_matched%>%
   summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
   left_join(tract_emp, by = "FIPS")%>%
   filter(!is.na(C000))%>%
-  summarise(w_tot = sum(x_tot)*sum(CR01/C000),
-            m_tot = sum(x_tot)*(sum((C000-CR01)/C000)),
+  summarise(w_tot = sum(x_tot*(CR01/C000)),
+            m_tot = sum(x_tot*((C000-CR01)/C000)),
             w_pop = sum(CR01),
             m_pop = sum(C000)) %>%
   mutate(w_per = w_tot/w_pop,
-         m_per = m_tot/m_pop)%>%
-  gather(var, value, w_tot:m_per) %>%
-  separate(var, into = c("race", "var"),sep="_")
+         m_per = m_tot/m_pop,
+         tot_w = w_tot/(w_tot+m_tot),
+         pop_w = w_pop/(w_pop+m_pop))
+# %>%
+#   gather(var, value, w_tot:m_per) %>%
+#   separate(var, into = c("race", "var"),sep="_")
 
 TLR_Bham_tract <- MSA_SMEloan$TLR_matched%>%
   # filter(Year >=2012) %>%
   group_by(FIPS) %>%
   summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
-  right_join(tract_emp[c("FIPS","C000","CR01")], by = "FIPS")%>%
+  left_join(tract_emp[c("FIPS","C000","CR01")], by = "FIPS")%>%
   filter(!is.na(C000))%>%
   mutate(is.white = (CR01/C000>0.5))%>%
   group_by(is.white)%>%
   summarise(emp = sum(C000),
             x_tot = sum(x_tot, na.rm = TRUE))%>%
-  mutate(value = x_tot/emp)
+  mutate(value = x_tot/emp/12)
+
