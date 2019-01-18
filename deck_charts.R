@@ -1,7 +1,7 @@
 # Author: Sifan Liu
 # Date: Thu Dec 27 10:47:45 2018
 # --------------
-pkgs <- c('tidyverse')
+pkgs <- c('tidyverse','ggubr')
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -24,6 +24,7 @@ p_peermap <- ggplot()+
 # shift share
 MSA_shiftshare$industry <- MSA_shiftshare$Sub.Category
 
+# lolipop chart 
 p_shiftshare <- ggplot(data = MSA_shiftshare)+
   geom_segment(aes(x = reorder(industry,Jobs_actual), xend = industry,
                    y = Jobs_actual, yend = Jobs_expected, color = `Competitive Effect`>0),size = 2)+
@@ -37,12 +38,33 @@ p_shiftshare <- ggplot(data = MSA_shiftshare)+
    facet_wrap(~place)+
   pthemes
 
+# bar chart
 ggplot(data = MSA_shiftshare %>% filter(place == "Birmingham.Hoover..AL"))+
   geom_bar(aes(x=reorder(industry, `Competitive Effect`),
-               y = `Competitive Effect`,fill = `Competitive Effect`>0), 
+               y = `Competitive Effect`,fill = ), 
            stat = "identity")+
   scale_fill_manual(labels = c("Slower than nation", "Faster than nation"), 
                     name = NULL, values = c("#0070c0", "#ffc000"))+
+  scale_x_discrete(labels = c("Finance and Insurance" = "Finance",
+                              'Transportation and Warehousing' = "Logistics",
+                              "Utilities" = "Utilities",
+                              "Real Estate and Rental and Leasing" = "Real Estate, etc.",
+                              "Arts, Entertainment, and Recreation" = "Arts",
+                              "Educational Services" = "Education",
+                              "Agriculture, Forestry, Fishing and Hunting" = "Agriculture",
+                              "Other Services (except Public Administration)" = "Local Services",
+                              "Mining, Quarrying, and Oil and Gas Extraction" = "Mining",
+                              "Government" = "Government",
+                              "Manufacturing" = "Manufacturing",
+                              "Management of Companies and Enterprises" = "Headerquaters",
+                              "Accommodation and Food Services" = "Hospitality",
+                              "Wholesale Trade" = "Wholesale",
+                              "Information" = "Information",
+                              "Waste Management and Remediation Services" = "Administrative",
+                              "Construction" = "Construction",
+                              "Retail Trade" = "Retail",
+                              "Professional, Scientific, and Technical Services" = "Professional",
+                              "Health Care and Social Assistance" = "Healthcare"))+
   labs(title = "Employment differential between Birmingham MSA and nation, 2006 - 2016",
        y = "Number of Jobs",
        x = "Industry")+
@@ -76,6 +98,7 @@ p_2by2 <- ggplot()+
   pthemes
 
 # export emp share
+# slop chart
 p_expemp <- ggplot(data = Peer_traded,aes(x=factor(Year), y = EmpShare, color = c(Area==msa_FIPS | Area == "1073"), group = Area))+
   geom_point(size = 3)+
   geom_line(size = 1)+
@@ -89,12 +112,32 @@ p_expemp <- ggplot(data = Peer_traded,aes(x=factor(Year), y = EmpShare, color = 
   facet_wrap(~Area.Bucket)+
   pthemes
 
+# lolipop chart
+ggplot(data = Peer_traded%>%filter(!is.na(metro))%>%
+         select(-Emp, -Emptot)%>%
+         spread(Year,EmpShare))+
+  geom_segment(aes(x=reorder(metro, `2016`), xend = metro,
+                   y = `2006`, yend = `2016`))+
+  geom_point(aes(x=metro,y = `2006`), color = "#0070c0", size = 3)+
+  geom_point(aes(x=metro,y = `2016`), color = "#ffd966", size = 3)+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = "Change in employment share of traded industries, 2006 - 2016",
+       y = "Share of employment",
+       x = NULL)+
+  facet_wrap(~Area.Bucket, scales = "free_y")+
+  pthemes
+
 # export share
 p_expshare <- bar_plot(export, "Export share of GDP, 2017", HL)+
   scale_y_continuous(labels = scales::percent)+
   facet_wrap(~geo, scales = "free_y")+pthemes
 
 # opp
+# reorder factor level for charts
+MSA_opp$type <- factor(MSA_opp$type, levels = c("Other jobs","Good high-skill jobs","Good sub-BA jobs",
+                                                "Promising high-skill jobs","Promising sub-BA jobs"))
+
 p_opp <- ggplot(MSA_opp, aes(x = factor(Traded), y = share, fill = type))+
   scale_x_discrete(labels = c("Non-traded", "Traded"), name = element_blank())+
   scale_fill_manual(values = c("#797171","#ffd966", "#ffc000", "#0070c0", "#003249"))+
@@ -104,21 +147,21 @@ p_opp <- ggplot(MSA_opp, aes(x = factor(Traded), y = share, fill = type))+
   geom_bar(stat = "identity")+pthemes
 
 # EXIM
-p_EXIM <- p_SME(SMEloans, "EXIM")+
-  ggtitle("Annual average loans from Export-Import Bank per 1000 workers")+
-  scale_y_continuous(labels = scales::dollar_format(scale = 0.001))
+p_EXIM <- p_SME(SMEloans%>%mutate(value = value*emp.tot/emp.traded), "EXIM")+
+  ggtitle("Average annual loan volume from Export-Import Bank\nper 1000 traded industries workers")+
+  scale_y_continuous(labels = scales::dollar_format())
 
 
 # university R&D
-p_RDuni <- bar_plot(NSF, "Average annual R&D expenditure (thousand) at higher education institutions\nper 1000 workers, 2012 - 2016", HL)+
-  scale_y_continuous(labels = scales::dollar_format(scale = 1000)) +
+p_RDuni <- bar_plot(NSF, "Average annual R&D expenditure at higher education institutions\nper 1000 workers, 2012 - 2016", HL)+
+  scale_y_continuous(labels = scales::dollar_format(scale = 1000, suffix = "K")) +
   # labs(x = "($ per capita)",y = element_blank())+
   facet_wrap(~geo, scales = "free_y")+pthemes%+%theme(strip.text = element_blank())
 
 # UAB funding
 myorder <- c("All other fields", "Engineering", "Life sciences, nec","Biological and biomedical sciences", "Health sciences")
 UAB_RD$fields <- factor(UAB_RD$fields, levels = myorder)
-UAB_RD$value_adj = scales::dollar(UAB_RD$value, scale = 0.001,accuracy = 1)
+UAB_RD$value_adj = scales::dollar(UAB_RD$value, scale = 0.001,accuracy = 0.1, suffix = "M")
 
 p_UAB <- ggplot(UAB_RD, aes(x ="", y = value/1000, fill = fields, label = fields)) +
   geom_bar(width = 1,stat = "identity") +
@@ -138,8 +181,8 @@ p_UAB_donut <- ggpar(ggdonutchart(UAB_RD, "value", label= "value_adj",
                                   fill = "fields",color = "#D9D9D9"),
                      palette = c("#797171","#ffd966", "#d1e5f0", "#0070c0", "#003249"),
                      legend = "right", ticks = FALSE,
-                     title = "Average annual R&D expenditure (million) at UAB, 2007 - 2016")+
-  pthemes%+%theme(legend.title = element_blank())
+                     title = "Average annual R&D expenditure at UAB, 2007 - 2016")+
+   pthemes%+%theme(legend.title = element_blank())
 
 # AUTM
 
@@ -148,19 +191,22 @@ p_AUTM <- bar_plot(AUTM %>% filter(!is.na(value)), "Average annual licensing inc
   facet_wrap(~geo, scales = "free_y")+pthemes+
   pthemes%+%theme(strip.text = element_blank())
 
-p_startup <- ggplot(startup %>% filter(!is.na(tot_st)), 
-                    aes(x=reorder(metro,tot_st/msaemp), y = value_p, fill = HL, alpha = reorder(type, value_p)))+
+p_uni_startup <- ggplot(uni_startup %>% filter(!is.na(tot_st)), 
+                    aes(x=reorder(metro,value), y = value, fill = HL))+
   geom_bar(stat = "identity", position = "stack")+
-  scale_fill_manual(name = NULL,
-                    values = c("#0070c0", "#ffc000"),
-                    label = c( "Peer average", paste(placename,countyname, sep = " /\n")))+
-  scale_alpha_manual(name = NULL,
-                     values = c(0.5,1),
-                     label = c("Out of state","In state"))+
+  scale_fill_manual(name = NULL,guide = FALSE,
+                    values = c("#0070c0", "#ffc000"))+
+  # scale_alpha_manual(name = NULL,
+  #                    values = c(0.5,1),
+  #                    label = c("Out of state","In state"))+
   coord_flip()+
-  labs(title = "Start-ups per 1000 workers launched at universities, 2006 - 2017", x=NULL, y = NULL)+
+  labs(title = "Number of start-ups launched at universities, 2006 - 2017", x=NULL, y = NULL)+
   facet_wrap(~geo, scales = "free_y")+
   pthemes%+%theme(strip.text = element_blank())
+
+p_startup <- bar_plot(startup, "Number of start-ups per 1M workers, by MSA")+
+  scale_y_continuous(labels = scales::number_format(scale=1000))+
+  pthemes
 
 
 # USPTO
@@ -171,12 +217,51 @@ p_USPTO <- bar_plot(patent, "Total number of USPTO patents per 1000 workers, 200
   pthemes%+%theme(strip.text = element_blank())
 
 # patent complexity
-p_pci<- bar_plot(patentCOMP, "Metro knowledge complexity scores, 2000 - 2004", HL)+pthemes
+p_pci<- bar_plot(patentCOMP, "Metro knowledge complexity index, 2000 - 2004", HL)+pthemes
 
 # Venture capital
 p_VC <- bar_plot(VC, "VC investment per 1000 workers, 2015 - 2017", HL)+
   scale_y_continuous(labels = scales::dollar)+
   pthemes
+
+# advanced industries
+# slope chart
+ggplot(data = Peer_ai %>%filter(EmpShare<0.2),
+       aes(x=factor(Year), y = EmpShare, color = c(Area==msa_FIPS | Area == "1073"), 
+           group = Area, label = Area.Name))+
+  geom_text()+
+  geom_point(size = 5)+
+  geom_line(size = 2)+
+  scale_color_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)+
+  # geom_text(nudge_x = 0.5)+
+  labs(x = NULL, y = "Employment Share" , 
+       title = "Change in employment share of advanced industries, 2006 - 2016")+
+  scale_y_continuous(labels = scales::percent)+
+  facet_wrap(~Area.Bucket)+
+  pthemes
+
+# lollipop chart
+ggplot(data = Peer_ai%>%
+         filter(!is.na(metro))%>%
+         select(-Emp, -Emptot)%>%
+         spread(Year,EmpShare))+
+  geom_segment(aes(x=reorder(metro, `2016`), xend = metro,
+                   y = `2006`, yend = `2016`))+
+  geom_point(aes(x=metro,y = `2006`), color = "#0070c0", size = 3)+
+  geom_point(aes(x=metro,y = `2016`), color = "#ffd966", size = 3)+
+  coord_flip()+
+  scale_y_continuous(labels = scales::percent)+
+  labs(title = "Change in employment share of traded industries, 2006 - 2016",
+       y = "Share of employment",
+       x = NULL)+
+  facet_wrap(~Area.Bucket, scales = "free_y")+
+  pthemes
+
+# SBIR
+p_SBIR <- p_SME(SMEloans, "SSTR")+
+  ggtitle("Average annual SBIR/SSTR grants per 1000 workers")+
+  scale_y_continuous(labels = scales::dollar_format())+
+  theme(legend.position = "bottom")
 
 # BDS
 p_BDS <- ggplot(data = fsfa %>%group_by(year2, Age)%>%summarise(JbC = sum(net_job_creation)),
@@ -195,18 +280,28 @@ p_young <- ggplot(data = young,
             aes(label= scales::percent(emp.stot), y = emp.stot), 
             position = position_stack(vjust = 1.1))+
   scale_fill_manual(values = c("#0070c0", "#ffc000", "#ffd966"))+
-  labs(x = NULL, title = "Share of employment at young firms (0  ~ 10 years) by firm size in Birmingham MSA")+pthemes
+  labs(x = NULL, title = "Share of employment at young firms (0  ~ 10 years) by firm size in Birmingham MSA")+
+  pthemes
 
 # inc 5000
-p_inc<- bar_plot(I5HGC, "Number of Inc5000 high growth companies per 1000 worker, 2011 - 2017", HL)+
-  # scale_y_continuous(labels = scales::comma)+
+p_inc<- bar_plot(I5HGC, "Number of Inc. 5000 high growth companies per 1M workers, 2011 - 2017", HL)+
+  scale_y_continuous(labels = scales::number_format(scale=1000))+
   pthemes
 
 # FDIC
 p_FDIC <- p_SME(SMEloans, "FDIC")+
-  ggtitle("Annual average loans from private FDIC-insured banks (million) per 1000 workers")+
-  scale_y_continuous(labels = scales::dollar_format(scale = 0.000001))
+  ggtitle("Average annual loan volume from FDIC-insured banks per 1000 workers")+
+  scale_y_continuous(labels = scales::dollar_format(scale = 0.000001, suffix = "M"))
 
+p_FDICmap <- ggplot(FDIC_Bham_alt, aes(fill = level))+
+  geom_sf()+
+  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+  scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
+                    labels = c("0 - 1", "1 - 5", "5 - 10", "> 10"),
+                    name = "amount") +
+  ggtitle("Annual average FDIC loans (million) per 1000 workers, 1996 - 2017") +
+  coord_sf(datum=NA)+pthemes%+%
+  theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
 
 # p_FDIC_r <- ggplot(FDIC_race %>% filter(var == "per"), 
 #                    aes(x = race, y = value, fill = race, label = scales::dollar(value)))+
@@ -218,35 +313,42 @@ p_FDIC <- p_SME(SMEloans, "FDIC")+
 #                     label = c("minority", "white"))+pthemes
 
 p_FDIC_r <- ggplot(FDIC_Bham_tract,
-                   aes(x = is.white, y = value, fill = is.white, label = scales::dollar(value)))+
+                   aes(x = is.white, y = value, fill = is.white, 
+                       label = scales::dollar_format(accuracy = 0.1, suffix = "M")(value)))+
   geom_bar(stat="identity")+
-  # geom_text(position = position_nudge(y=1))+
-  ggtitle("Per 1000 workers FDIC loans (million), 1996 - 2017")+
+  geom_text(position = position_stack(vjust = 1.05))+
+  ggtitle("Average annual loan volume from FDIC-insured banks\nby census tract type per 1000 workers , 1996 - 2017")+
   scale_fill_manual(name = NULL,
                     values = c("#0070c0", "#ffc000"),
                     label = c("share of white workers < 50%", 
                               "share of white workers >= 50%"))+
-  scale_y_continuous(labels = scales::dollar)+
   labs(x=NULL, y = NULL)+
   pthemes%+%
-  theme(axis.text.x = element_blank())
+  theme(axis.text = element_blank())
+
+# SBA
+p_SBA <- p_SME(SMEloans, "SBA")+
+  ggtitle("Average annual loan volume from SBA per 1000 workers")+
+  scale_y_continuous(labels = scales::dollar_format())
 
 
 # CDFI 
 p_CDFI <- p_SME(SMEloans, "CDFI")+
-  ggtitle("Annual average CDFI loans per 1000 workers")+
-  scale_y_continuous(labels = scales::dollar_format(scale = 0.001))
+  ggtitle("Average annual loan volume from CDFIs per 1000 workers")+
+  scale_y_continuous(labels = scales::dollar_format())
 
+# per capita map
 p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
   geom_sf()+
   geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
   scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
                     labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
-                    name = "per capita CDFI amount") +
-  ggtitle("Per employee CDFI loans in Jefferson County by workplace tract, 2006 - 2017") +
+                    name = "amount") +
+  ggtitle("Annual average CDFI loans in Jefferson County by workplace tract, 2006 - 2017") +
   coord_sf(datum=NA)+pthemes%+%
   theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
 
+# total amount
 ggplot(CDFI_Bham, aes(fill = sum/1000000))+
   geom_sf()+
   geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
@@ -268,15 +370,16 @@ ggplot(CDFI_Bham, aes(fill = sum/1000000))+
 #   pthemes
 
 p_CDFI_r <- ggplot(TLR_Bham_tract,
-                   aes(x = is.white, y = value, fill = is.white, label = scales::dollar(value)))+
+                   aes(x = is.white, y = value, fill = is.white, 
+                       label = scales::dollar_format(accuracy = 0.1)(value)))+
   geom_bar(stat="identity")+
-  # geom_text(position = position_nudge(y=1))+
-  ggtitle("Per 1000 workders CDFI loans, 2006 - 2017")+
+  geom_text(position = position_stack(vjust = 1.05))+
+  ggtitle("Average annual loan volume from CDFIs\nby census tract type per 1000 workers, 2006 - 2017")+
   scale_fill_manual(name = NULL,
                     values = c("#0070c0", "#ffc000"),
                     label = c("share of white workers < 50%", 
                               "share of white workers >= 50%"))+
-  scale_y_continuous(labels = scales::dollar)+
+  # scale_y_continuous(labels = scales::dollar)+
   labs(x=NULL, y = NULL)+
   pthemes%+%
-  theme(axis.text.x = element_blank())
+  theme(axis.text = element_blank())
