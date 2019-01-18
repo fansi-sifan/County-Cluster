@@ -82,6 +82,19 @@ County_export <- read.csv("V:/Export Monitor/2018/Deliverables/Deliverables/Coun
   filter(gc == as.integer(county_FIPS))%>%
   filter(year == 2017)
 
+export_ind<-bind_rows(datafiles$MSA_export %>%
+               select(industry = X_li4_,export_value = xr_i4_gm) %>%
+               arrange(-export_value)%>%
+               top_n(10)%>%
+               mutate(geo = "MSA"),
+             County_export %>%
+               select(industry = X_li4_,export_value = xr_i4_gc) %>%
+               arrange(-export_value)%>%
+               top_n(10)%>%
+               mutate(geo = "County")
+)
+
+
 # Traded Sector ==============================================
 tradable <- read.csv("V:/Sifan/R/xwalk/tradable.csv")
 Peer_ind <- read.csv("source/Emsi_2018.4_ind_data.csv")
@@ -97,8 +110,8 @@ Peer_traded <- Peer_ind %>%
   left_join(Peers[c("FIPS", "county")], by = "FIPS")%>%
   left_join(Peers[c("cbsa", "metro")], by = c("FIPS" = "cbsa"))%>%
   mutate(metro = ifelse(is.na(metro),county, metro))
-  
-  
+
+
 # load("source/EMSI_master.Rda")
 # PeerMetro_ind <- EMSI_master %>%
 #   right_join(Peers[c('cbsa','cbsa_name')], by = 'cbsa_name' )%>%
@@ -178,13 +191,13 @@ t <- datafiles$PeerMetro_ind %>%
   # arrange(Jobs2016)%>%
   top_n(10,Jobs2016)
 
-ggplot(t,aes(x=reorder(Description,Jobs2016),y = Jobs2016, label = Jobs2016))+
-  geom_bar(stat = "identity", fill = "#0070c0")+
-  geom_text(nudge_y = 1000)+
-  labs(title = "Largest tradable industries \n(6 digit NAICS) in Birmingham MSA",
-       x=NULL,y="Number of Jobs, 2016")+
-  pthemes%+%theme(axis.text.x = element_blank())+
-  coord_flip()
+# ggplot(t,aes(x=reorder(Description,Jobs2016),y = Jobs2016, label = Jobs2016))+
+#   geom_bar(stat = "identity", fill = "#0070c0")+
+#   geom_text(nudge_y = 1000)+
+#   labs(title = "Largest tradable industries \n(6 digit NAICS) in Birmingham MSA",
+#        x=NULL,y="Number of Jobs, 2016")+
+#   pthemes%+%theme(axis.text.x = element_blank())+
+#   coord_flip()
 
 MSA_shiftshare <- read.csv("source/Regional_Comparison_Report3045.csv")%>%
   gather(place, value, Birmingham.Hoover..AL:Jefferson.County..AL)%>%
@@ -625,7 +638,7 @@ CBP_Bham <- CBP %>%
 # SAVE OUTPUT ---------------------------------------------------
 dfs <- objects()
 # datafiles <- mget(dfs[grep("Peer|MSA|labels", dfs)])
-new <- mget(dfs[grep("Peer_ai|Peer_traded", dfs)])
+new <- mget(dfs[grep("export_ind", dfs)])
 datafiles <- gdata::update.list(datafiles, new)
 
 save(datafiles, file = paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))

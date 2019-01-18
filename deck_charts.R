@@ -133,6 +133,18 @@ p_expshare <- bar_plot(export, "Export share of GDP, 2017", HL)+
   scale_y_continuous(labels = scales::percent)+
   facet_wrap(~geo, scales = "free_y")+pthemes
 
+# export industries
+ggplot(export_ind,aes(x=reorder(industry,export_value),y = export_value, 
+                      label = scales::comma_format(accuracy = 0.1, suffix = "M")(export_value)))+
+  geom_bar(stat = "identity", fill = "#0070c0")+
+  geom_text(nudge_y = 80)+
+  labs(title = "Largest tradable industries (4 digit NAICS) in the region",
+       x=NULL,y="Export volume, 2017")+
+  pthemes%+%theme(axis.text.x = element_blank())+
+  facet_wrap(~geo, scales = "free_y")+
+  coord_flip()
+
+
 # opp
 # reorder factor level for charts
 MSA_opp$type <- factor(MSA_opp$type, levels = c("Other jobs","Good high-skill jobs","Good sub-BA jobs",
