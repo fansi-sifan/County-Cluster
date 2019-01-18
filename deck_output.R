@@ -60,6 +60,11 @@ new_slides("But there may be capital gaps by place and by race", p_FDIC_r,5)
 new_slides("Birmingham has not had significant CDFI funding", p_CDFImap,5)
 new_slides("Birmingham has not had significant CDFI funding", p_CDFI_r,5)
 
+# table
+pptx <- pptx%>%
+  add_slide(layout = "Title and Content", master =  "Office Theme")%>%
+  ph_with_table(type = "body", value = MSA_inclusion)
+
 # FINAL OUTPUT ================================================
 
 print(pptx, target = "V:/Building Inclusive Cities/Birmingham/Market Assessment/test.pptx") 
