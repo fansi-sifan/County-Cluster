@@ -49,6 +49,19 @@ PeerMetro_MM <- MM  %>%
   right_join(Peers[c('cbsa','cbsa_name')], by = 'cbsa') %>%
   unique()
 
+inclusion_change <- read_csv(paste0(paths,"Inclusion/Inclusion Change (IS 2018.12.11).csv"))%>%
+  filter(cbsa == as.integer(msa_FIPS))%>%
+  filter(year == "2007-2017")
+
+MSA_inclusion <- inclusion_change%>%
+  mutate(var = ifelse(race=="Total",eduatt,race))%>%
+  select(-se,-eduatt,-race,-cbsa)%>%
+  spread(var,value)%>%
+  group_by(indicator)%>%
+  summarise_if(is.numeric,sum,na.rm = TRUE)%>%
+  select(indicator, Total, rank, White, `People of Color`, `BA or Above`, `High School`)
+  
+
 # Exports ====================================================
 PeerMetro_export <- readxl::read_xlsx("V:/Export Monitor/2018/Deliverables/Deliverables/Metros Data/Metros by Total, NAICS 2 3.xlsx", sheet = "Total") %>%
   filter(Year == 2017)  %>%
@@ -74,13 +87,16 @@ tradable <- read.csv("V:/Sifan/R/xwalk/tradable.csv")
 Peer_ind <- read.csv("source/Emsi_2018.4_ind_data.csv")
 Peer_traded <- Peer_ind %>%
   left_join(tradable, by = c("Industry" = "NAICS"))%>%
-  # filter(!is.na(Traded))%>%
   group_by(Area, Area.Name,Area.Bucket,Traded, Year)%>%
   summarise(Emp = sum(Jobs))%>%
   group_by(Area, Year)%>%
   mutate(Emptot = sum(Emp),
-         EmpShare = Emp/Emptot)%>%
-  filter(Traded==1)
+         EmpShare = Emp/Emptot,
+         FIPS = padz(Area, 5))%>%
+  filter(Traded==1)%>%
+  left_join(Peers[c("FIPS", "county")], by = "FIPS")%>%
+  left_join(Peers[c("cbsa", "metro")], by = c("FIPS" = "cbsa"))%>%
+  mutate(metro = ifelse(is.na(metro),county, metro))
   
   
 # load("source/EMSI_master.Rda")
@@ -113,11 +129,6 @@ MSA_opp <- readxl::read_xlsx("V:/Performance/Project files/Opportunity Industrie
   gather(type, value, `Good sub-BA jobs`:`Other jobs`)%>%
   mutate(share = value/`Total jobs`)
 
-MSA_opp$type <- factor(MSA_opp$type, levels = c(
-                                                "Other jobs","Good high-skill jobs","Good sub-BA jobs",
-                                                "Promising high-skill jobs","Promising sub-BA jobs"))
-  
-
 
 # Advanced Industries =========================================
 ai <- read.csv("V:/Sifan/R/xwalk/advanced industries.csv") %>%
@@ -145,8 +156,12 @@ Peer_ai <- Peer_ind %>%
   summarise(Emp = sum(Jobs, na.rm = TRUE)) %>%
   group_by(Area, Year) %>%
   mutate(Emptot = sum(Emp),
-         EmpShare = Emp/Emptot)%>%
-  filter(AI==1)
+         EmpShare = Emp/Emptot,
+         FIPS = padz(Area,5))%>%
+  filter(AI==1)%>%
+  left_join(Peers[c("FIPS", "county")], by = "FIPS")%>%
+  left_join(Peers[c("cbsa", "metro")], by = c("FIPS" = "cbsa"))%>%
+  mutate(metro = ifelse(is.na(metro),county, metro))
 
 
 
@@ -155,17 +170,21 @@ MSA_ss <- read.csv('V:/Performance/Project files/Metro Monitor/2018v/Output/Shif
   filter(cbsa2013_fips == msa_FIPS) %>%
   filter(year == 2016)
 
-# t <- datafiles$PeerMetro_ind %>%
-#   filter(cbsa == msa_FIPS)%>%
-#   left_join(tradable, by =c("NAICS6" ="NAICS")) %>%
-#   filter(!is.na(Traded))%>%
-#   group_by(cbsa, cbsa_name, Traded) %>%
-#   summarise(emp16 = sum(Jobs2016, na.rm = TRUE),
-#             emp06 = sum(Jobs2006, na.rm = TRUE),
-#             ComEff = sum(ComEffect, na.rm = TRUE))%>%
-#   mutate(emp_chg = emp16 - emp06,
-#          expected = emp_chg-ComEff)
-# (TODO) GET county ss data
+t <- datafiles$PeerMetro_ind %>%
+  filter(cbsa == msa_FIPS)%>%
+  left_join(tradable, by =c("NAICS6" ="NAICS")) %>%
+  filter(!is.na(Traded))%>%
+  filter(Traded==1)%>%
+  # arrange(Jobs2016)%>%
+  top_n(10,Jobs2016)
+
+ggplot(t,aes(x=reorder(Description,Jobs2016),y = Jobs2016, label = Jobs2016))+
+  geom_bar(stat = "identity", fill = "#0070c0")+
+  geom_text(nudge_y = 1000)+
+  labs(title = "Largest tradable industries \n(6 digit NAICS) in Birmingham MSA",
+       x=NULL,y="Number of Jobs, 2016")+
+  pthemes%+%theme(axis.text.x = element_blank())+
+  coord_flip()
 
 MSA_shiftshare <- read.csv("source/Regional_Comparison_Report3045.csv")%>%
   gather(place, value, Birmingham.Hoover..AL:Jefferson.County..AL)%>%
@@ -264,6 +283,28 @@ Peer_AUTM <- AUTM %>%
             instate_st = sum(St.Ups.in.Home.St,na.rm = TRUE))%>%
   mutate(FIPS = padz(as.character(FIPS), 5)) %>%
   inner_join(msa_ct_FIPS[c("FIPS","cbsa")], by = "FIPS")
+
+# crunchbase
+crunchbase <- read.csv("source/crunchbase.csv")
+Peer_crunchbase <- crunchbase%>%
+  group_by(Headquarters.Location)%>%
+  summarise(count = n())%>%
+  separate(Headquarters.Location, c("city","state","country"), sep= ",")
+
+# find cbsa codes
+for(i in 1:nrow(Peer_crunchbase)){
+  city <- Peer_crunchbase$city[[i]]
+  po <- grep(city,Peers$cbsa_name)
+  Peer_crunchbase$cbsa[[i]] <- Peers$cbsa[[po]]
+}
+
+Peer_crunchbase <- Peer_crunchbase%>%
+  group_by(cbsa)%>%
+  summarise(count = sum(count))%>%
+  left_join(Peers[c("cbsa","msaemp","metro")], by = "cbsa")
+
+MSA_crunchbase <- crunchbase%>%
+  filter(grepl("Birmingham|Hoover",Headquarters.Location))
 
 
 # REGPAT =====================================================
@@ -431,12 +472,14 @@ source("ACSapi.R")
 #   right_join(Peers[c('FIPS')], by = c("GC.target.geo.id2" = "FIPS"))
 
 # SME loans peers ==========================================================
-load("SBA_loan_cleaned.Rda")
+
+load("Temp data/SBA_loan_cleaned.Rda")
 year1 <- seq(2011,2016)
 year2 <- seq(2005,2010)
 
 # EXIM
 EXIM <- loan_datafiles$EXIM_matched%>%
+  # only includes working capital loans, excludes insurance
   filter(Program =="Working Capital")  %>%
   mutate(
     year_range = case_when(
@@ -482,6 +525,7 @@ TLR <- loan_datafiles$TLR_matched %>%
     year_range = case_when(
       Year %in% year2 ~ "2005 - 2010",
       Year %in% year1 ~ "2011 - 2016")) %>%
+  # only includes investees that are businesses or CDFIs, excludes individuals
   filter(investeetype != "IND") %>%
   group_by(county14, year_range) %>%
   summarise(amt.tot = sum(originalamount, na.rm = TRUE),
@@ -518,32 +562,32 @@ PeerMetro_SMEloans <- bind_rows(
 MSA_SMEloan <- purrr::map(loan_datafiles,filter,county14 == as.numeric(county_FIPS))
 
 # SBA geocoding -----------------------------------------------
-address <- MSA_SMEloan$SBA_matched %>% select(BorrStreet, BorrCity, BorrState) %>% distinct()
-names(address) <- c("street","city","state")
-address$street <- gsub("\\#", "Apt", address$street)
-address <- censusr::append_geoid(address, geoid_type = "tract")
+# address <- MSA_SMEloan$SBA_matched %>% select(BorrStreet, BorrCity, BorrState) %>% distinct()
+# names(address) <- c("street","city","state")
+# address$street <- gsub("\\#", "Apt", address$street)
+# address <- censusr::append_geoid(address, geoid_type = "tract")
+# 
+# names(address) <- c("BorrStreet", "BorrCity","BorrState", "FIPS")
+# 
+# MSA_SMEloan$SBA_matched <- MSA_SMEloan$SBA_matched %>%
+#   left_join(address, by = c("BorrStreet", "BorrCity","BorrState"))
+# 
+# MSA_SMEloan$SBA_matched <- MSA_SMEloan$SBA_matched %>%
+#   mutate(FIPS = ifelse(is.na(FIPS.x), FIPS.y, FIPS.x)) %>%
+#   select(-FIPS.x, -FIPS.y)
+# na.share(address,"geoid")
+# # SSTR geocoding -----------------------------------------------
+# address <- MSA_SMEloan$SSTR_matched %>% select(Address1, City, State) %>% distinct()
+# names(address) <- c("street","city","state")
+# address <- censusr::append_geoid(address, geoid_type = "tract")
+# 
+# names(address) <- c("Address1", "City", "State", "FIPS")
+# 
+# MSA_SMEloan$SSTR_matched  <- MSA_SMEloan$SSTR_matched %>%
+#   left_join(address, by = c("Address1", "City", "State"))
 
-names(address) <- c("BorrStreet", "BorrCity","BorrState", "FIPS")
 
-MSA_SMEloan$SBA_matched <- MSA_SMEloan$SBA_matched %>%
-  left_join(address, by = c("BorrStreet", "BorrCity","BorrState"))
-
-MSA_SMEloan$SBA_matched <- MSA_SMEloan$SBA_matched %>%
-  mutate(FIPS = ifelse(is.na(FIPS.x), FIPS.y, FIPS.x)) %>%
-  select(-FIPS.x, -FIPS.y)
-na.share(address,"geoid")
-# SSTR geocoding -----------------------------------------------
-address <- MSA_SMEloan$SSTR_matched %>% select(Address1, City, State) %>% distinct()
-names(address) <- c("street","city","state")
-address <- censusr::append_geoid(address, geoid_type = "tract")
-
-names(address) <- c("Address1", "City", "State", "FIPS")
-
-MSA_SMEloan$SSTR_matched  <- MSA_SMEloan$SSTR_matched %>%
-  left_join(address, by = c("Address1", "City", "State"))
-
-
-source("V:/Sifan/R/code/add2FIPS.R")
+# source("V:/Sifan/R/code/add2FIPS.R")
 
 # add2FIPS("Albert Einstein College of Med/Yeshiva University, NY", KEY)
 
@@ -557,16 +601,16 @@ source("V:/Sifan/R/code/add2FIPS.R")
 # }
 
 # EXIM geocoding -----------------------------------------------
-address <- datafiles$MSA_SMEloan$EXIM_matched %>% select(Primary.Exporter, Primary.Exporter.City, Primary.Exporter.State.Code) %>% distinct()
-address <- address %>%
-  mutate(add = paste(Primary.Exporter, Primary.Exporter.City, Primary.Exporter.State.Code, sep = ","))
-
-for(i in 1:nrow(address)){
-  address$FIPS[[i]] <- add2FIPS(address$add[[i]],key)
-}
-
-MSA_SMEloan$EXIM_matched <- MSA_SMEloan$EXIM_matched %>%
-  left_join(address, by = c("Primary.Exporter", "Primary.Exporter.City", "Primary.Exporter.State.Code"))
+# address <- datafiles$MSA_SMEloan$EXIM_matched %>% select(Primary.Exporter, Primary.Exporter.City, Primary.Exporter.State.Code) %>% distinct()
+# address <- address %>%
+#   mutate(add = paste(Primary.Exporter, Primary.Exporter.City, Primary.Exporter.State.Code, sep = ","))
+# 
+# for(i in 1:nrow(address)){
+#   address$FIPS[[i]] <- add2FIPS(address$add[[i]],key)
+# }
+# 
+# MSA_SMEloan$EXIM_matched <- MSA_SMEloan$EXIM_matched %>%
+#   left_join(address, by = c("Primary.Exporter", "Primary.Exporter.City", "Primary.Exporter.State.Code"))
 # 
 # 
 # writexl::write_xlsx(datafiles$MSA_SMEloan, path = paste0("result/",county_FIPS,"_SMEloans.xlsx"))
@@ -581,8 +625,8 @@ CBP_Bham <- CBP %>%
 # SAVE OUTPUT ---------------------------------------------------
 dfs <- objects()
 # datafiles <- mget(dfs[grep("Peer|MSA|labels", dfs)])
-new <- mget(dfs[grep("Peer_AUTM", dfs)])
+new <- mget(dfs[grep("Peer_ai|Peer_traded", dfs)])
 datafiles <- gdata::update.list(datafiles, new)
 
-# save(datafiles, file = paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))
+save(datafiles, file = paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))
 # writexl::write_xlsx(new, path = paste0("result/",msa_FIPS,"_Market Assessment_new.xlsx"))
