@@ -1,7 +1,7 @@
 # Author: Sifan Liu
 # Date: Fri Dec 28 13:40:50 2018
 # --------------
-pkgs <- c("httr", "tidyverse", "devtools")
+pkgs <- c("httr", "tidyverse", "devtools",'tidycensus')
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -9,6 +9,32 @@ if(any(!check)){
     install.packages(pkgs.missing)
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
   } 
+padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
+
+# Labor force data =================================================
+# group, Employment rates, labor force participation rates by sex, race, education
+emp_school <- sapply(seq(1,7),function(x)paste0("B14005_00",x))
+emp_edu <- sapply(seq(1,29),function(x)paste0("B23006_",pad(x,3)))
+emp_sex_age_race <- c(sapply(seq(1,27),function(x)paste0("C23002A_",padz(x,3))),
+                      sapply(seq(1,27),function(x)paste0("C23002B_",padz(x,3))))
+
+# MSA
+t <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+        variables = emp_edu,
+        year = 2017)%>%
+  filter(GEOID%in%Peers$cbsa)
+
+temp <- t%>%left_join(var, by = c("variable"="name"))
+write.csv(temp, "emp_edu.csv")
+
+# county
+get_acs(geography = "county",variables = emp_sex_age_race,year = 2017,
+        # output = 'wide',
+        state = "AL", county="Jefferson")
+
+# Bham
+get_acs(geography = "place", variables = emp_sex_age_race, year = 2017,
+        state = "AL", place = "Birmingham") %>% filter(grepl("Birmingham", NAME))
 
 # opportunity index HUD =============================================
 # source: https://www.cbpp.org/research/housing/interactive-map-where-voucher-households-live-in-the-50-largest-metropolitan-areas
