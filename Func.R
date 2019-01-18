@@ -27,7 +27,9 @@ pthemes <- theme(rect = element_rect(fill = "D9D9D9", colour=NA),
                  legend.background = element_rect(fill = "transparent"),
                  legend.key = element_rect(fill = "transparent", color = NA),
                  legend.box.background = element_rect(fill = "transparent", colour = NA),
-                 text = element_text(size = 15), axis.text = element_text(size = 12),
+                 text = element_text(size = 15,family ="sans" ), 
+                 axis.text = element_text(size = 12, family = "sans"),
+                 plot.title = element_text(hjust = 0.5),
                  axis.ticks = element_blank()
 )
 
@@ -43,7 +45,7 @@ bar_plot <- function(df,title, HL){
 # SMEloans plot, peer vs Bham
 opr <- function(df){
   df %>%
-    group_by(Bham, program, year_range, emp.tot)%>%
+    group_by(Bham, program, year_range, emp.tot, emp.traded)%>%
     summarise(amt.tot = sum(as.numeric(amt.tot), na.rm = TRUE))%>%
     filter(!is.na(year_range))%>%
     mutate(value = amt.tot/emp.tot*1000)
@@ -54,7 +56,8 @@ p_SME <- function(df,pgm){ggplot(data = df%>%filter(program==pgm),
     geom_bar(stat = "identity", position = "dodge")+
     scale_fill_manual(name = element_blank(), 
                       values = c("#0070c0", "#ffc000"), 
-                      labels = c( "Peer average", paste(placename,countyname, sep = " /\n")))+
+                      labels = c( "Peer average", paste(placename,countyname, sep = " /")))+
     labs(x = NULL, y = NULL)+
-    facet_wrap(~geo, nrow = 1)+pthemes}
+    facet_wrap(~geo, nrow = 1)+
+    pthemes%+%theme(legend.position = "bottom")}
 
