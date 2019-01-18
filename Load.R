@@ -415,18 +415,22 @@ dfs <- objects()
 new <- mget(dfs[grep("NMTC_matched", dfs)])
 loan_datafiles <- gdata::update.list(loan_datafiles, new)
 
-save(loan_datafiles, file = "SBA_loan_cleaned.Rda")
+save(loan_datafiles, file = "Temp data/SBA_loan_cleaned.Rda")
 
 # MetroMonitor -------------------------------------------------------------
 # paths <- "V:/Performance/Project files/Metro Monitor/2018v/Output/"
-paths <- "V:/Performance/Project files/Metro Monitor/2018v/Output/"
+paths <- "V:/Performance/Project files/Metro Monitor/2019v/Output/"
+
 
 # Growth, Prosperity, Inclusion
 
+
+
+
 # change
-growth_change <- read.csv(paste0(path,"Growth/Growth Ranks (IS 2017.11.15).csv")) 
-prosperity_change <- read.csv(paste0(path,"Prosperity/Prosperity Ranks (IS 2017.11.14).csv")) 
-inclusion_change <- read.csv(paste0(path,"Inclusion/Inclusion Ranks (IS 2017.11.17).csv"))
+growth_rank <- read.csv(paste0(paths,"Growth/Growth Ranks (IS 2017.11.15).csv")) 
+prosperity_rank <- read.csv(paste0(paths,"Prosperity/Prosperity Ranks (IS 2017.11.14).csv")) 
+inclusion_rank <- read.csv(paste0(paths,"Inclusion/Inclusion Ranks (IS 2017.11.17).csv"))
 
 # value
 growth_value <- read.csv("Growth/Growth Values (IS 2017.11.15).csv") %>%
