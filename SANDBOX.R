@@ -11,12 +11,19 @@ if(any(!check)){
   } 
 padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
 
-# Labor force data =================================================
+# PUMA ===========================================================
+install.packages('ipumsr')
+library(ipumsr)
+ddi <- read_ipums_ddi("usa_00012.xml")
+data <- read_ipums_micro(ddi)
+
+# tidycensus =================================================
 # group, Employment rates, labor force participation rates by sex, race, education
 emp_school <- sapply(seq(1,7),function(x)paste0("B14005_00",x))
 emp_edu <- sapply(seq(1,29),function(x)paste0("B23006_",pad(x,3)))
 emp_sex_age_race <- c(sapply(seq(1,27),function(x)paste0("C23002A_",padz(x,3))),
                       sapply(seq(1,27),function(x)paste0("C23002B_",padz(x,3))))
+var <- load_variables(2017, "acs5")
 
 # MSA
 t <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
@@ -24,18 +31,18 @@ t <- get_acs(geography = "metropolitan statistical area/micropolitan statistical
         year = 2017)%>%
   filter(GEOID%in%Peers$cbsa)
 
-temp <- t%>%left_join(var, by = c("variable"="name"))
-write.csv(temp, "emp_edu.csv")
-
 # county
-get_acs(geography = "county",variables = emp_sex_age_race,year = 2017,
-        # output = 'wide',
-        state = "AL", county="Jefferson")
+t <- get_acs(geography = "county",variables = emp_sex_age_race,year = 2017)%>%
+  filter(GEOID%in%Peers$FIPS)
 
 # Bham
-get_acs(geography = "place", variables = emp_sex_age_race, year = 2017,
+t <- get_acs(geography = "place", variables = emp_sex_age_race, year = 2017,
         state = "AL", place = "Birmingham") %>% filter(grepl("Birmingham", NAME))
 
+temp <- t %>% 
+  left_join(var, by = c("variable"="name"))
+
+write.csv(temp, "Bham_emp_sex_age_race.csv")
 # opportunity index HUD =============================================
 # source: https://www.cbpp.org/research/housing/interactive-map-where-voucher-households-live-in-the-50-largest-metropolitan-areas
 
@@ -120,34 +127,35 @@ if(any(!check)){
 View(fieldsdf)
 
 # UAB -------------------------------
-query <- with_qfuns(
-  and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
-      gt(patent_date = "2016-01-01"))
-)
+# query <- with_qfuns(
+#   and(eq(assignee_id = "29e18557907c764249b4a340158fe219"),
+#       gt(patent_date = "2016-01-01"))
+# )
 
 # Bham MSA 7 counties -------------------------------
 query <- with_qfuns(
-  and(or(eq(assignee_county_fips = "73"),
-         eq(assignee_county_fips = "7"),
-         eq(assignee_county_fips = "9"),
-         eq(assignee_county_fips = "21"),
-         eq(assignee_county_fips = "115"),
-         eq(assignee_county_fips = "117"),
-         eq(assignee_county_fips = "112")),
-      eq(assignee_state_fips = "1"),
+  and(eq(assignee_county_fips = c("73","7","9","21","115","117","112")),
+      eq(assignee_state_fips = "01"),
       gt(patent_date = "2006-01-01"))
 )
 
 # fields -------------------------------
 fields <- c(
-  "patent_number", "assignee_organization", "patent_date",
+  "patent_number", "assignee_organization", "patent_year","assignee_county_fips",
   "assignee_total_num_patents", "wipo_field_title","wipo_sector_title",
-  "cpc_subsection_title","cpc_group_title", "cpc_sub_group_title",
+  "cpc_subsection_title","cpc_group_title", "cpc_subgroup_title",
   "nber_subcategory_title")
+
+#test
+# search_pv(
+#   query = query,endpoint = "patents",
+#   fields = fields)
 
 output <- search_pv(
   query = query,endpoint = "patents",
   fields = fields, all_pages = TRUE)
+
+summary(as.factor(output$data$patents$patent_year))
 
 # results -------------------------------
 # top patent category
@@ -166,10 +174,10 @@ output$data$patents%>%unnest(nbers)%>%
   summarise(count = n())%>%
   arrange(desc(count))
 
-output$data$patents%>%unnest(uspcs)%>%
-  group_by(uspc_subclass_title)%>%
-  summarise(count = n())%>%
-  arrange(desc(count))
+# output$data$patents%>%unnest(uspcs)%>%
+#   group_by(uspc_subclass_title)%>%
+#   summarise(count = n())%>%
+#   arrange(desc(count))
 
 # top patent assignees
 s <- output$data$patents%>%unnest(assignees)
