@@ -18,6 +18,8 @@ na.share <- function(df,col)(sum(is.na(df[[col]]))/length(df[[col]]))
 # check distribution
 range <- function(df,col)(summary(as.factor(df[[col]])))
 
+# quickly summarize factor levels
+sfactor <- function(x)summary(as.factor(x))
 
 # plot themes
 pthemes <- theme(rect = element_rect(fill = "D9D9D9", colour=NA),
