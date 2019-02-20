@@ -297,7 +297,7 @@ Peer_AUTM <- AUTM %>%
   mutate(FIPS = padz(as.character(FIPS), 5)) %>%
   inner_join(msa_ct_FIPS[c("FIPS","cbsa")], by = "FIPS")
 
-# crunchbase
+# crunchbase ----------------------------------------------
 crunchbase <- read.csv("source/crunchbase.csv")
 Peer_crunchbase <- crunchbase%>%
   group_by(Headquarters.Location)%>%
@@ -363,6 +363,49 @@ PeerMetro_VC <- read.csv('source/VC.csv') %>%
   right_join(Peers[c('cbsa', 'cbsa_name')], by = 'cbsa') %>%
   unique()
   
+# Inc5000
+PeerMetro_I5HGC <- read.csv("source/I5HGC_density.csv")%>%
+  mutate(cbsa = as.character(CBSA))%>%
+  right_join(Peers[c('cbsa', 'cbsa_name')], by = 'cbsa') %>%
+  unique()
+
+# # relationship between patents and startup activities ------------------------------
+# temp <- plyr::join_all(list(
+#   read.csv('source/USPTO_msa.csv') %>%
+#     filter(GeoType == "Metropolitan Statistical Area")%>%
+#     select(ID.Code, Total)%>%
+#     mutate(cbsa = substr(as.character(ID.Code),2,6)),
+#   read.csv('source/Complexity_msa.csv') %>%
+#     mutate(cbsa = as.character(cbsa)),
+#   read.csv('source/VC.csv') %>%
+#     filter(round == "Total VC" & measure == "Capital Invested ($ M) per 1M Residents") %>%
+#     mutate(cbsa = as.character(cbsa13)),
+#   read.csv("source/I5HGC_density.csv")%>%
+#     mutate(cbsa = as.character(CBSA))),
+#   by = "cbsa",
+#   type = "inner"
+# )
+# 
+# t <- temp %>% left_join(read.csv("../../R/xwalk/msa.pop.csv")%>%
+#                      mutate(cbsa = as.character(cbsa)), by = "cbsa") %>%
+#   mutate(patent_pc = Total/pop2016) %>%
+#   select(cbsa, metro_name = MSA, pop2016,
+#          patent_complex = complex,
+#          patent_pc,
+#          VC_pc = value,
+#          Inc_pc = I5HGC_Density)
+# 
+# write.csv(t, "result/patent_startup.csv")
+# 
+# fit <- lm(VC_pc ~ patent_complex+patent_pc, data = t)
+# fit <- lm(Inc_pc ~ patent_complex+patent_pc, data = t)
+# summary(fit)
+
+# correlation matrix -------------------
+# cormat <- round(cor(t[4:7]),2)
+# melted_cormat <- reshape2::melt(cormat)
+# ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+#   geom_tile()
 
 # Firm dynamics ================================================
 
