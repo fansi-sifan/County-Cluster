@@ -11,6 +11,10 @@ if(any(!check)){
   } 
 padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
 
+# GEOCODING with street address ==================================
+
+tigris::call_geolocator("5300 COURT Q", "Birmingham", "AL")
+
 # PUMA ===========================================================
 install.packages('ipumsr')
 library(ipumsr)
