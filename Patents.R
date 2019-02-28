@@ -89,7 +89,7 @@ year2 <- seq(2008,2012)
 Peermetro_patents <- Peermetro_patents %>%
   mutate(fips = paste0(padz(assignee_state_fips,2),padz(assignee_county_fips,3)),
          patent_year = as.numeric(patent_year.x)) %>%
-  left_join(msa_ct_FIPS[c("cbsa","fips")], by = "fips")%>%
+  left_join(msa_ct_FIPS[c("cbsa","FIPS")], by = c("fips"="FIPS"))%>%
   mutate(
     year_range = case_when(
       patent_year %in% year2 ~ "2008 - 2012",
@@ -130,5 +130,13 @@ patents_summary <- left_join(
     select(-count,-wipo_sector_title)%>%
     spread(rank, wipo_field_title),
   by = "cbsa")
+
+patents_count <- Peermetro_patents %>%
+  filter(!is.na(year_range))%>%
+  group_by(cbsa,msaemp,patent_year,metro)%>%
+  summarise(count = n_distinct(patent_number))%>%
+  mutate(value = count/msaemp*1000)
+
+write.csv(patents_count, "result/patents_count.csv")
 
 write.csv(patents_summary,"result/patents_summary.csv")
