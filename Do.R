@@ -14,62 +14,11 @@ if(any(!check)){
 
 source('Func.R')
 
-# assign geocodes for analysis ------------------------
-city_FIPS <- "07000"
-ct_FIPS <- "073"
-msa_FIPS <- "13820"
-st_FIPS <- "01"
-county_FIPS <- paste0(st_FIPS, ct_FIPS)
-
-# assign names for text display ------------------------
-placename <- "Birmingham"
-countyname <- "Jefferson County, AL"
-metroname <- "Birmingham MSA"
-
 # load datasets ------------------------------
 load(paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))
 list2env(datafiles,envir=.GlobalEnv)
 
-# maps data ----------------------------------
-usa <- map_data("state")
-cbsa = core_based_statistical_areas()
-# map.cty <- tidy(tracts(state = st_FIPS, county = ct_FIPS), region = "GEOID")
-map.Bham <- tidy(places(state = st_FIPS) %>% filter_place(placename), region = "GEOID")
-
-# LODES by census block group -----------------------
-downl_LODES <- function(year, st){
-  temp <- tempfile()
-  download.file(paste0("https://lehd.ces.census.gov/data/lodes/LODES7/",st,"/wac/",st,"_wac_S000_JT02_",year,".csv.gz"), temp)
-  data <- read.csv(gzfile(temp))
-  unlink(temp)
-  return(data)
-}
-tract_emp <- downl_LODES(2015,"al") %>% 
-  mutate(FIPS = substr(padz(as.character(w_geocode),15),1,11),
-         county = substr(FIPS, 1,5)) %>%
-  filter(county == county_FIPS) %>%
-  select(-w_geocode, - createdate)%>%
-  group_by(FIPS,county) %>%
-  summarise_if(is.numeric, sum)
-# census tracts ---------------------------------------
-var1990 <- c(sapply(seq(1,5),function(x)paste0("P006000",x)),"P0010001")
-var2000 <-  sapply(seq(1,6),function(x)paste0("P00300",x)) 
-var2010 <-  sapply(seq(1,5),function(x)paste0("P00300",x)) 
-
-Bham_tract_data <- function(YEAR){get_decennial(geography = "tract", year = YEAR,
-                                                state = st_FIPS, county = ct_FIPS,output = "wide",geometry = TRUE,
-                                                variables = eval(parse(text = paste0("var",YEAR))))}
-
-years <- lst(1990, 2000, 2010)
-census <- purrr::map(seq(1990,2010,10),Bham_tract_data) %>%map2(years, ~ mutate(.x, id = .y))
-
-
 # ANALYSIS ============================================
-# Peer map
-map_data <- cbsa@data %>% filter(CBSAFP %in% Peers$cbsa)
-map_data$long = -as.numeric(substring(map_data$INTPTLON,2))
-map_data$lat = as.numeric(map_data$INTPTLAT)
-
 # shift share
 Traded_NAICS2 <- c("FH", "21", "31", "51", "52", "54", "61", "FR")
 
@@ -240,18 +189,6 @@ SMEloans <- bind_rows(PeerMetro_SMEloans %>%
                     opr()%>%
                     mutate(geo = "County"))
 # FDIC
-# map
-FDIC_Bham_alt <- MSA_SMEloan$FDIC_matched %>%
-  mutate(FIPS = gsub("\\.","",FIPS),
-         year = as.integer(year),
-         id = paste0(State, county, FIPS))%>%
-  left_join(tract_emp, by = c("id" = "FIPS"))%>%
-  group_by(id, C000) %>%
-  summarise(value = sum(x_tot, na.rm = TRUE)) %>%
-  # annual average, 1996 - 2017
-  mutate(value = value/C000/22,
-         level = cut(value, breaks = c(0,1,5,10,Inf), include.lowest = TRUE))%>%
-  left_join(census[[3]][c("GEOID","geometry")], by = c("id" = "GEOID"))
 
 # race
 FDIC_race <- MSA_SMEloan$FDIC_matched %>%
@@ -273,36 +210,9 @@ FDIC_race <- MSA_SMEloan$FDIC_matched %>%
 #   gather(var, value, w_tot:m_per) %>%
 #   separate(var, into = c("race", "var"),sep="_")
 
-FDIC_Bham_tract <- MSA_SMEloan$FDIC_matched %>%
-  # filter(year>=2012)%>%
-  mutate(FIPS = gsub("\\.","",FIPS),
-         year = as.integer(year),
-         id = paste0(State, county, FIPS))%>%
-  group_by(id)%>%
-  summarise(x_tot = sum(x_tot, na.rm = TRUE))%>%
-  left_join(tract_emp, by = c("id" = "FIPS"))%>%
-  filter(!is.na(C000))%>%
-  mutate(is.white = (CR01/C000>0.5))%>%
-  group_by(is.white)%>%
-  summarise(emp = sum(C000, na.rm = TRUE),
-            x_tot = sum(x_tot, na.rm = TRUE))%>%
-  mutate(value = x_tot/emp/22)
 
 
 # CDFI
-# MAP
-CDFI_Bham <- MSA_SMEloan$TLR_matched%>%
-  filter(Year>=2006)%>%
-  select(Year, FIPS, gender, race,investeetype, purpose,originalamount) %>%
-  left_join(tract_emp, by = "FIPS")%>%
-  group_by(FIPS, C000) %>%
-  summarise(sum = sum(originalamount, na.rm = TRUE)) %>%
-  #annual average, 2006 - 2017
-  mutate(value = sum/C000/12,
-         level = cut(value, breaks = c(0,10,50,100,Inf), include.lowest = TRUE))%>%
-  right_join(census[[3]][c("GEOID","geometry")], by = c("FIPS" = "GEOID"))
-
-
 # race
 TLR_Bham_weight <- MSA_SMEloan$TLR_matched%>%
   filter(Year >=2012) %>%
@@ -322,15 +232,4 @@ TLR_Bham_weight <- MSA_SMEloan$TLR_matched%>%
 #   gather(var, value, w_tot:m_per) %>%
 #   separate(var, into = c("race", "var"),sep="_")
 
-TLR_Bham_tract <- MSA_SMEloan$TLR_matched%>%
-  # filter(Year >=2012) %>%
-  group_by(FIPS) %>%
-  summarise(x_tot = sum(originalamount, na.rm = TRUE))%>%
-  left_join(tract_emp[c("FIPS","C000","CR01")], by = "FIPS")%>%
-  filter(!is.na(C000))%>%
-  mutate(is.white = (CR01/C000>0.5))%>%
-  group_by(is.white)%>%
-  summarise(emp = sum(C000),
-            x_tot = sum(x_tot, na.rm = TRUE))%>%
-  mutate(value = x_tot/emp/12)
 

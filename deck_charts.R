@@ -305,9 +305,9 @@ p_FDIC <- p_SME(SMEloans, "FDIC")+
   ggtitle("Average annual loan volume from FDIC-insured banks per 1000 workers")+
   scale_y_continuous(labels = scales::dollar_format(scale = 0.000001, suffix = "M"))
 
-p_FDICmap <- ggplot(FDIC_Bham_alt, aes(fill = level))+
-  geom_sf()+
-  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+p_FDICmap <- ggplot()+
+  geom_sf(data = FDIC_Bham_alt, aes(fill = level))+
+  geom_sf(data = map.Bham, fill = NA, color = "#ffd966", size = 1)+
   scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
                     labels = c("0 - 1", "1 - 5", "5 - 10", "> 10"),
                     name = "amount") +
@@ -350,9 +350,9 @@ p_CDFI <- p_SME(SMEloans, "CDFI")+
   scale_y_continuous(labels = scales::dollar_format())
 
 # per capita map
-p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
-  geom_sf()+
-  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+p_CDFImap <- ggplot()+
+  geom_sf(data = CDFI_Bham, aes(fill = level))+
+  geom_sf(data = map.Bham, fill = NA, color = "#ffd966", size = 1)+
   scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
                     labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),
                     name = "amount") +
@@ -361,9 +361,9 @@ p_CDFImap <- ggplot(CDFI_Bham, aes(fill = level))+
   theme(axis.title = element_blank(), axis.text = element_blank(),legend.position = "bottom")
 
 # total amount
-ggplot(CDFI_Bham, aes(fill = sum/1000000))+
-  geom_sf()+
-  geom_polygon(data = map.Bham, aes(x = long, y = lat, group = group), fill = NA, color = "#ffd966", size = 1)+
+ggplot()+
+  geom_sf(data = CDFI_Bham, aes(fill = sum/1000000))+
+  geom_sf(data = map.Bham, color = "#ffd966", size = 1, fill = NA)+
   scale_fill_gradient(name = "Amount (million)",low = "#bdd7e7", high = "#08519c")+
   # scale_fill_manual(values = c("#bdd7e7","#6baed6","#3182bd","#08519c"),
   #                   labels = c("0 - 10", "10 - 50", "50 - 100", "> 100"),

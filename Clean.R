@@ -13,34 +13,6 @@ if(any(!check)){
 
 source('Func.R')
 
-# DEFINE GEO -------------------------------------------------
-city_FIPS <- "07000"
-ct_FIPS <- "073"
-msa_FIPS <- "13820"
-st_FIPS <- "01"
-county_FIPS <- paste0(st_FIPS, ct_FIPS)
-msa100_FIPS <- as.character((read.csv("V:/Sifan/R/xwalk/top100metros.csv") %>% filter(top100==1))[["GEO.id2"]])
-# peers from clustering result ================================
-# Peers <- read.csv("source/counties_cluster_all.csv") %>%
-#   mutate(cbsa = as.character(cbsa)) %>%
-#   mutate(stcofips = padz(as.character(stcofips), 5)) %>%
-#   group_by(kmeans) %>%
-#   filter(msa_FIPS %in% cbsa)
-
-# modified peers to include Nashiville, etc. ================
-peerlist <- c("34980", "47260", "33340", "32820","40060", 
-              "31140", "35380", "15380", "40380","26620",
-              "28140", "17460", "26900", "12940", msa_FIPS)
-Peers <- readxl::read_xlsx('result/13820_Market Assessment.xlsx', sheet = "Peers")%>%
-  filter(cbsa %in% peerlist)
-
-msa_ct_FIPS <- read.csv('V:/Sifan/R/xwalk/county2msa.csv') %>%
-  mutate(fips = paste0(padz(fipsstatecode,2), padz(fipscountycode,3)),
-         COUNTY = trimws(toupper(gsub("County","",countycountyequivalent))))%>%
-  filter(cbsacode %in% Peers$cbsa)%>%
-  mutate(cbsa = as.character(cbsacode))%>%
-  select(cbsa, FIPS = fips, metro = cbsatitle, county = COUNTY)
-
 # GET DATA ----------------------------------------------------
 # Metro Monitor ==============================================
 load('source/MetroMonitor.Rda')
@@ -281,6 +253,12 @@ AUTM <- read.csv("source/AUTM.csv")
 # 
 # write.csv(AUTM, "source/AUTM.csv")
 
+# AUTM <- read.csv("source/AUTM.csv")
+# AUTM <- AUTM %>% 
+#   mutate(FIPS = padz(as.character(FIPS), 5)) %>%
+#   inner_join(msa_ct_FIPS[c("FIPS","cbsa")], by = "FIPS")
+# write.csv(AUTM, "result/AUTM_peers.csv")
+
 # analysis --------------------------------
 # convert dollar to numeric
 Peer_AUTM <- AUTM %>% 
@@ -369,43 +347,7 @@ PeerMetro_I5HGC <- read.csv("source/I5HGC_density.csv")%>%
   right_join(Peers[c('cbsa', 'cbsa_name')], by = 'cbsa') %>%
   unique()
 
-# # relationship between patents and startup activities ------------------------------
-# temp <- plyr::join_all(list(
-#   read.csv('source/USPTO_msa.csv') %>%
-#     filter(GeoType == "Metropolitan Statistical Area")%>%
-#     select(ID.Code, Total)%>%
-#     mutate(cbsa = substr(as.character(ID.Code),2,6)),
-#   read.csv('source/Complexity_msa.csv') %>%
-#     mutate(cbsa = as.character(cbsa)),
-#   read.csv('source/VC.csv') %>%
-#     filter(round == "Total VC" & measure == "Capital Invested ($ M) per 1M Residents") %>%
-#     mutate(cbsa = as.character(cbsa13)),
-#   read.csv("source/I5HGC_density.csv")%>%
-#     mutate(cbsa = as.character(CBSA))),
-#   by = "cbsa",
-#   type = "inner"
-# )
-# 
-# t <- temp %>% left_join(read.csv("../../R/xwalk/msa.pop.csv")%>%
-#                      mutate(cbsa = as.character(cbsa)), by = "cbsa") %>%
-#   mutate(patent_pc = Total/pop2016) %>%
-#   select(cbsa, metro_name = MSA, pop2016,
-#          patent_complex = complex,
-#          patent_pc,
-#          VC_pc = value,
-#          Inc_pc = I5HGC_Density)
-# 
-# write.csv(t, "result/patent_startup.csv")
-# 
-# fit <- lm(VC_pc ~ patent_complex+patent_pc, data = t)
-# fit <- lm(Inc_pc ~ patent_complex+patent_pc, data = t)
-# summary(fit)
 
-# correlation matrix -------------------
-# cormat <- round(cor(t[4:7]),2)
-# melted_cormat <- reshape2::melt(cormat)
-# ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
-#   geom_tile()
 
 # Firm dynamics ================================================
 
