@@ -424,16 +424,20 @@ Bham_density <- density %>%
   select(-job_tot)%>%
   spread(year,density)
 
-Bham_industry_density <-density %>%
+density %>%
   filter(year==2015|year==2004)%>%
-  # filter(naics == "00")%>%
+  filter(naics != "00")%>%
   # filter(cntyfips == county_FIPS)%>%
   mutate(GEOID = substr(GEOID,1,11))%>%
-  group_by(GEOID, year, naics)%>%
-  filter(GEOID %in% nb_Bham)%>%
+  right_join(nb_Bham, by = "GEOID")%>%
+  group_by(nb, year, naics)%>%
   summarise(job_tot = sum(job_tot, na.rm = T),
             landarea = sum(landarea, na.rm = T),
-            density = job_tot/landarea)
+            density = job_tot/landarea)%>%
+  select(-job_tot)%>%
+  spread(year,density)%>%
+  mutate(delta = abs(`2015`-`2004`),r_delta = `2015`-`2004`)%>%
+  top_n(3,delta)
 
 # rds <- tigris::primary_roads(class = "sf")
 # Bham_rds <- sf::st_join(map.cty,rds)
@@ -466,7 +470,7 @@ Bham_tract_all <- map.cty%>%
                                  c(0,0.01,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,Inf)))%>%
   # school quality
   left_join(Bham_school, by = "GEOID")%>%
-  mutate(school_level = cut(TRACTSCORE_L,c(0,0.1,0.2,0.6,0.8,Inf)))%>%
+  mutate(school_level = cut(TRACTSCORE_H,c(0,0.1,0.2,0.6,0.8,Inf)))%>%
   # broadband rates
   left_join(Bham_broadband, by = "GEOID")%>%
   # job density
@@ -484,7 +488,7 @@ save(Bham_tract_all, file = "Bham_tract_all.Rda")
 # PLOT MAPS ==========================================================
 load("Bham_tract_all.Rda")
 
-map_Bham(Bham_tract_all%>%filter(GEOID %in% nb_Bham),
+map_Bham(Bham_tract_all%>%filter(county==county_FIPS),
          "densitydelta_level")+
   scale_fill_manual(values = c("#a50f15","#ef3b2c","#9ecae1","#6baed6","#084594"),
                     label = c("-4000 ~ -1000", "-1000 ~ 0", "0 ~ 500", "500 ~ 1000", "1000 ~ 4000"),
@@ -628,9 +632,9 @@ tract_share <- function(col, benchmark, dir=T){
   
 }
 
-pop_share <- function(col, benchmark, dir=T){
-  share_b <- sum((Bham_tract_all[[col]] > benchmark)*(Bham_tract_all$pop), na.rm = T)
-  share_s <- sum((Bham_tract_all[[col]] <= benchmark)*(Bham_tract_all$pop), na.rm = T)
+pop_share <- function(col, benchmark, pop,dir=T){
+  share_b <- sum((Bham_tract_all[[col]] > benchmark)*(Bham_tract_all[[pop]]), na.rm = T)
+  share_s <- sum((Bham_tract_all[[col]] <= benchmark)*(Bham_tract_all[[pop]]), na.rm = T)
   
   if (dir) {
     return(share_b/(share_b+share_s))
@@ -649,9 +653,6 @@ b_phlth <- 12.1
 b_mhlth <- 11.7
 b_chetty <- 0.2000008005
 
-
-Bham_tract_all$
-
 tract_share("PHLTH", b_phlth)
 tract_share("MHLTH", b_mhlth)
 tract_share("poverty", b_poverty)
@@ -659,13 +660,17 @@ tract_share("une", b_une)
 tract_share("no_vehicle", b_novehicle)
 tract_share("kfr_top20_pooled_pooled_mean", b_chetty)
 
-pop_share("PHLTH", b_phlth)
-pop_share("MHLTH", b_mhlth)
-pop_share("poverty", b_poverty)
-pop_share("une", b_une)
-pop_share("no_vehicle", b_novehicle)
-pop_share("kfr_top20_pooled_pooled_mean", b_chetty)
+pop_share("PHLTH", b_phlth, "pop")
+pop_share("MHLTH", b_mhlth, "pop")
+pop_share("poverty", b_poverty, "pop")
+pop_share("une", b_une, "pop")
+pop_share("no_vehicle", b_novehicle, "pop")
+pop_share("kfr_top20_pooled_pooled_mean", b_chetty, "pop")
+pop_share("TRACTSCORE_H",0.2,"n_students",F)
 
+Bham_tract_all<- Bham_tract_all%>%
+  mutate(broadband = as.numeric(as.character(Broadband_level)))
+pop_share("broadband",2,F)
 
 
 # correlation matrix -------------------
@@ -708,6 +713,6 @@ ggplot(data = plot_access%>%gather(geo, percentage,-type),
        aes(x=geo, y=-as.numeric(gsub("-|%","",percentage)), 
            fill = type, label = percentage))+
   geom_bar(stat = "identity", position = "dodge")+
-  geom_text(position = position_dodge(width = 1))+
+  geom_text(position = position_dodge(width = 1),vjust = 1.5)+
   scale_fill_brewer(palette = "Blues", name = "Type of neighborhoods")+
   pthemes
