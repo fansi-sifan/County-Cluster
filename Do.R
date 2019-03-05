@@ -232,4 +232,12 @@ TLR_Bham_weight <- MSA_SMEloan$TLR_matched%>%
 #   gather(var, value, w_tot:m_per) %>%
 #   separate(var, into = c("race", "var"),sep="_")
 
+# commute by car
+commute_car <- PeerMetro_ACS %>%
+  left_join(Peers[c('cbsa','metro',"msaemp")], by = 'cbsa') %>%
+  select(cbsa,msaemp,
+         metro,
+         value = complex
+  ) %>%
+  mutate(HL = c(cbsa == msa_FIPS))
 

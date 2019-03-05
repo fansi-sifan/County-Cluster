@@ -59,6 +59,7 @@ poverty_race <- c(sapply(LETTERS[1:9],function(x){paste0("B17001",x,"_001E")}),
 
 # transit_race <- sapply(LETTERS[1:7],function(x,y){paste0("B08105",x,"_00",y,"E")},seq(1,7))
 transit <- sapply(seq(1,6), function(x){paste0("B08105A","_00",x,"E")})
+drive <- c("B08141_001E","B08141_006E")
 migration_edu <- sapply(padz(c(seq(1,6),seq(19,36)),2), function(x){paste0("B07009_0",x,"E")})
 house_type <- sapply(seq(1,9), function(x){paste0("B25024_00",x,"E")})
 house_cost <- c("B25001_001E", "B06011_001E")
