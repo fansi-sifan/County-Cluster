@@ -29,19 +29,22 @@ map.cty <- get_acs(geography = "tract", year = 2017,
         output = "wide",geometry = TRUE,
         variables = tract_acs_vars)
 
+mapview(map.cty%>%filter(GEOID%in%nb_Bham),zcol = pop)
+
 # Peer map ----------------------------------
 map_data <- cbsa@data %>% filter(CBSAFP %in% Peers$cbsa)
 map_data$long = -as.numeric(substring(map_data$INTPTLON,2))
 map_data$lat = as.numeric(map_data$INTPTLAT)
 # Bham neighborhoods ----------------------------------
-downtown <- sapply(c("002700", "002400"), function(x)paste0(county_FIPS,x))
-homewood <- sapply(c("010702","010703","010704", "010706","005800"), function(x)paste0(county_FIPS,x))
-UAB <- sapply(c("004800","004701","004901","004902"),function(x)paste0(county_FIPS,x))
-hoover <- c("01117030314","01073014408","01073012913")
-avondale <- sapply(c("002306","005600"),function(x)paste0(county_FIPS,x))
-ensley <- sapply(c("003400","003300"),function(x)paste0(county_FIPS,x))
+nb_Bham <- list(downtown = sapply(c("002700", "002400"), function(x)paste0(county_FIPS,x)), 
+                homewood = sapply(c("010702","010703","010704", "010706","005800"), function(x)paste0(county_FIPS,x)),
+                UAB = sapply(c("004500","004800","004701","004901","004902"),function(x)paste0(county_FIPS,x)),
+                hoover = c("01117030314","01073014408","01073012913"),
+                avondale = sapply(c("002306","005600"),function(x)paste0(county_FIPS,x)),
+                ensley = sapply(c("003400","003300"),function(x)paste0(county_FIPS,x)))
 
-nb_Bham <- c(downtown, five_points_south, homewood,hoover,avondale,ensley)
+nb_Bham <- plyr::ldply(nb_Bham,cbind)
+names(nb_Bham)<- c("nb","GEOID")
 
 # CREATE MAPS ==================================================================================
 
@@ -79,9 +82,9 @@ downl_LODES_od <- function(year, st){
 
 # GET DATA =========================================
 # GET decennial employment ---------------------------------------
-var1990 <- c(sapply(seq(1,5),function(x)paste0("P006000",x)),"P0010001")
-var2000 <-  sapply(seq(1,6),function(x)paste0("P00300",x)) 
-var2010 <-  sapply(seq(1,5),function(x)paste0("P00300",x)) 
+# var1990 <- c(sapply(seq(1,5),function(x)paste0("P006000",x)),"P0010001")
+# var2000 <-  sapply(seq(1,6),function(x)paste0("P00300",x)) 
+# var2010 <-  sapply(seq(1,5),function(x)paste0("P00300",x)) 
 
 # time series
 # Bham_tract_time <- function(YEAR){get_decennial(geography = "tract", year = YEAR,
@@ -160,16 +163,17 @@ jobhub_glabel <- Bham_jobhubs%>%
   group_by(nb)%>%
   summarise(share = sum(S000))
 
-map_Bham(Bham_jobhubs, "access_level")+
-  geom_sf(data = jobhub_centroids,color = "red", size =1)+
-  coord_sf(datum = NA)+
-  scale_fill_manual(values = c("#bdd7e7","#0070c0","#08519c", "#003249"),
-                    labels = c("0 - 1%","1 - 1.5%", "1.5 - 2.5%", "> 2.5%"),
-                    name = "Share of workers\nby household tract")+
-  facet_wrap(~nb,nrow = 2)+
-  geom_text(data = jobhub_glabel, aes(x=-87,y=33.1,
-                               label = paste0("% total = ",scales::percent(share)),
-                               fill = NULL))
+# map access to jobhubs
+# map_Bham(Bham_jobhubs, "access_level")+
+#   geom_sf(data = jobhub_centroids,color = "red", size =1)+
+#   coord_sf(datum = NA)+
+#   scale_fill_manual(values = c("#bdd7e7","#0070c0","#08519c", "#003249"),
+#                     labels = c("0 - 1%","1 - 1.5%", "1.5 - 2.5%", "> 2.5%"),
+#                     name = "Share of workers\nby household tract")+
+#   facet_wrap(~nb,nrow = 2)+
+#   geom_text(data = jobhub_glabel, aes(x=-87,y=33.1,
+#                                label = paste0("% total = ",scales::percent(share)),
+#                                fill = NULL))
 
 # Capital Access -----------------------------------------------------------
 # employment by workplace tracts 
@@ -246,17 +250,17 @@ health_chart <- cityhealth %>%
   group_by(cityname, measure)%>%
   summarise(data_value = mean(data_value))
 
-ggplot(health_chart, 
-       aes(x = reorder(cityname, data_value), y = data_value, fill = measure, label = data_value))+
-  geom_bar(stat = "identity", position = "dodge")+
-  # geom_text(position = position_dodge(width = 1))+
-  scale_y_continuous(name = NULL)+
-  scale_x_discrete(name = NULL)+
-  scale_fill_manual(values = c("#ffd966", "#0070c0"), 
-                    labels = c("Mental Health", "Physical Health"), name = NULL)+
-  coord_flip()+
-  guides(fill = guide_legend(reverse = T))+
-  pthemes
+# ggplot(health_chart, 
+#        aes(x = reorder(cityname, data_value), y = data_value, fill = measure, label = data_value))+
+#   geom_bar(stat = "identity", position = "dodge")+
+#   # geom_text(position = position_dodge(width = 1))+
+#   scale_y_continuous(name = NULL)+
+#   scale_x_discrete(name = NULL)+
+#   scale_fill_manual(values = c("#ffd966", "#0070c0"), 
+#                     labels = c("Mental Health", "Physical Health"), name = NULL)+
+#   coord_flip()+
+#   guides(fill = guide_legend(reverse = T))+
+#   pthemes
 
 # Crimes -----------------------------
 folder <- "V:/Building Inclusive Cities/Birmingham/Market Assessment/Data/Crime"
@@ -328,7 +332,10 @@ load("Bham_Chetty.Rda")
 
 Bham_Chetty <- Bham_chetty%>%
   mutate(GEOID = paste0(padz(state,2),padz(county,3),padz(tract,6)))%>%
-  select(GEOID,kfr_top20_pooled_pooled_mean)
+  select(GEOID,
+         chetty_black = kfr_top20_black_pooled_mean,
+         chetty_white = kfr_top20_white_pooled_mean)
+  
 
 # map_Bham(Bham_Chetty_map,"kir_black_female_p50")+
 #   scale_fill_gradient(low = "#bdd7e7", high = "#08519c")+
@@ -394,13 +401,12 @@ PeerCounty_drive <- PeerCounty_drive %>%
          metro = county,
          HL = c(FIPS == county_FIPS))
 
-bar_plot(PeerCounty_drive,"Share of workers drive alone to work, 2017")+
-  scale_y_continuous(labels = NULL, limits = c(0,1))+
-  geom_text(data = PeerCounty_drive, aes(label = scales::percent(value),hjust = -0.1))+
-  pthemes
+# bar_plot(PeerCounty_drive,"")+
+#   scale_y_continuous(labels = NULL, limits = c(0,1))+
+#   geom_text(data = PeerCounty_drive, aes(label = scales::percent(value,accuracy = 1),hjust = -0.1))+
+#   pthemes
   
-# LEHD data ----------------------------------------------------------
-
+# Density data ----------------------------------------------------------
 paths <- "V:/Building Inclusive Cities/Birmingham/Market Assessment/Data/Job hubs/bhm_jobdensity.xlsx"
 file.exists(paths)
 density <- readxl::read_xlsx(paths)
@@ -418,14 +424,20 @@ Bham_density <- density %>%
   select(-job_tot)%>%
   spread(year,density)
 
-# mapview(map.cty)
+Bham_industry_density <-density %>%
+  filter(year==2015|year==2004)%>%
+  # filter(naics == "00")%>%
+  # filter(cntyfips == county_FIPS)%>%
+  mutate(GEOID = substr(GEOID,1,11))%>%
+  group_by(GEOID, year, naics)%>%
+  filter(GEOID %in% nb_Bham)%>%
+  summarise(job_tot = sum(job_tot, na.rm = T),
+            landarea = sum(landarea, na.rm = T),
+            density = job_tot/landarea)
 
-rds <- tigris::primary_roads(class = "sf")
-Bham_rds <- sf::st_join(map.cty,rds)
+# rds <- tigris::primary_roads(class = "sf")
+# Bham_rds <- sf::st_join(map.cty,rds)
 
-map_Bham(Bham_density,"level")+
-  scale_fill_manual(values = c("#fd8d3c","#f03b20","#bd0026"),
-                    label = NULL)
 
 # MERGE TRACT DATA  ==========================================================
 Bham_tract_all <- map.cty%>%
@@ -448,8 +460,10 @@ Bham_tract_all <- map.cty%>%
          crime_level = cut(value, c(0,20,40,60,Inf)))%>%
   # neighborhoods outcome
   left_join(Bham_Chetty, by = "GEOID")%>%
-  mutate(chetty_level = cut(kfr_top20_pooled_pooled_mean,
-                     c(0,0.01,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,Inf)))%>%
+  mutate(chettyblack_level = cut(chetty_black,
+                                 c(0,0.01,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,Inf)),
+         chettywhite_level = cut(chetty_white,
+                                 c(0,0.01,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,Inf)))%>%
   # school quality
   left_join(Bham_school, by = "GEOID")%>%
   mutate(school_level = cut(TRACTSCORE_L,c(0,0.1,0.2,0.6,0.8,Inf)))%>%
@@ -464,12 +478,21 @@ Bham_tract_all <- map.cty%>%
   left_join(Bham_CDFI, by = "GEOID")%>%
   left_join(Bham_FDIC, by = "GEOID")
 
+save(Bham_tract_all, file = "Bham_tract_all.Rda")
+
+
 # PLOT MAPS ==========================================================
+load("Bham_tract_all.Rda")
+
 map_Bham(Bham_tract_all%>%filter(GEOID %in% nb_Bham),
          "densitydelta_level")+
   scale_fill_manual(values = c("#a50f15","#ef3b2c","#9ecae1","#6baed6","#084594"),
                     label = c("-4000 ~ -1000", "-1000 ~ 0", "0 ~ 500", "500 ~ 1000", "1000 ~ 4000"),
                     name = "")
+
+map_Bham(Bham_tract_all%>%filter(GEOID %in% nb_Bham),"density_level")+
+           scale_fill_manual(values = c("#fd8d3c","#f03b20","#bd0026"))
+         
 
 map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
          "poverty_level")+
@@ -512,7 +535,24 @@ map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
   ggtitle("Share of public school students 10 -14 achieved a passing grade in AL state proficiency tests")
 
 t <- map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
-              "chetty_level")+
+              "chettyblack_level")+
+  scale_fill_brewer(palette = "RdBu",
+                    label = c("0 - 1%",
+                              "1 - 3%",
+                              "3 - 5%",
+                              "5 - 10%",
+                              "10 - 15%",
+                              "15 - 20%",
+                              "20 - 25%",
+                              "25 - 30%"
+                              ),
+                    name = "Probability")+
+  geom_sf(data = map.Bham, color = "black", size = 1, fill = NA)+
+  coord_sf(datum = NA)+
+  ggtitle("Probability of reaching the top quintile of the national individual income distribution")
+
+w <- map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
+              "chettywhite_level")+
   scale_fill_brewer(palette = "RdBu",
                     label = c("0 - 1%",
                               "1 - 3%",
@@ -530,8 +570,10 @@ t <- map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
   ggtitle("Probability of reaching the top quintile of the national individual income distribution")
 
 t
+w
 
 t+coord_sf(xlim = c(-86.85,-86.7),ylim =c(33.45,33.6))+ggtitle("")
+w+coord_sf(xlim = c(-86.85,-86.7),ylim =c(33.45,33.6))+ggtitle("")
 
 
 map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
@@ -571,7 +613,60 @@ map_Bham(Bham_tract_all%>%filter(county == county_FIPS),
                     name = "")+
   theme(legend.position = "bottom")
 
+
+
 # hist(Bham_tract_all$FDIC)
+
+# benchmark ----------------------------------
+tract_share <- function(col, benchmark, dir=T){
+  share_b <- sum(Bham_tract_all[[col]] > benchmark, na.rm = T)
+  share_s <- sum(Bham_tract_all[[col]] <= benchmark, na.rm = T)
+  
+  if (dir) {
+    return(share_b/(share_b+share_s))
+  }else{return(share_s/(share_b+share_s))}
+  
+}
+
+pop_share <- function(col, benchmark, dir=T){
+  share_b <- sum((Bham_tract_all[[col]] > benchmark)*(Bham_tract_all$pop), na.rm = T)
+  share_s <- sum((Bham_tract_all[[col]] <= benchmark)*(Bham_tract_all$pop), na.rm = T)
+  
+  if (dir) {
+    return(share_b/(share_b+share_s))
+  }else{return(share_s/(share_b+share_s))}
+  
+}
+
+
+acs_us <- get_acs(geography = "us" , year = 2017,output = "wide",variables = tract_acs_vars)
+b_novehicle <- acs_us$B08141_002E/acs_us$B08141_001E
+b_poverty <- acs_us$B17001_002E/acs_us$B17001_001E
+b_une <- acs_us$B23025_005E/acs_us$B23025_003E
+
+# https://chronicdata.cdc.gov/500-Cities/500-Cities-Local-Data-for-Better-Health-2018-relea/6vp6-wxuq/data
+b_phlth <- 12.1
+b_mhlth <- 11.7
+b_chetty <- 0.2000008005
+
+
+Bham_tract_all$
+
+tract_share("PHLTH", b_phlth)
+tract_share("MHLTH", b_mhlth)
+tract_share("poverty", b_poverty)
+tract_share("une", b_une)
+tract_share("no_vehicle", b_novehicle)
+tract_share("kfr_top20_pooled_pooled_mean", b_chetty)
+
+pop_share("PHLTH", b_phlth)
+pop_share("MHLTH", b_mhlth)
+pop_share("poverty", b_poverty)
+pop_share("une", b_une)
+pop_share("no_vehicle", b_novehicle)
+pop_share("kfr_top20_pooled_pooled_mean", b_chetty)
+
+
 
 # correlation matrix -------------------
 install.packages('corrplot')
@@ -600,3 +695,19 @@ corrplot(M, method = "color", type ="upper",add = T,
 usr <- par("usr")
 par(usr=usr)
 rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4],col = "#D9D9D9")
+
+
+plot_access <- tibble::tribble(
+                ~type, ~Birmingham.MSA, ~City.of.Birmingham,
+                "All",       "-14.50%",           "-13.40%",
+       "High-poverty",       "-36.40%",           "-16.10%",
+  "Majority-minority",       "-24.80%",           "-17.30%"
+  )
+
+ggplot(data = plot_access%>%gather(geo, percentage,-type),
+       aes(x=geo, y=-as.numeric(gsub("-|%","",percentage)), 
+           fill = type, label = percentage))+
+  geom_bar(stat = "identity", position = "dodge")+
+  geom_text(position = position_dodge(width = 1))+
+  scale_fill_brewer(palette = "Blues", name = "Type of neighborhoods")+
+  pthemes
