@@ -52,7 +52,7 @@ map_Bham <- function(df,var){
   ggplot()+
     geom_sf(data = map.cty %>% filter(substr(GEOID,3,5)==ct_FIPS), color = "#bdbdbd")+
     geom_sf(data = df, aes_string(fill = var))+
-    geom_sf(data = map.Bham, color = "#ffd966", size = 1, fill = NA)+
+    geom_sf(data = map.Bham, color = "#000000", size = 1, fill = NA)+
     theme(axis.title = element_blank(), 
           axis.text = element_blank(),
           rect = element_rect(fill = "#D9D9D9", colour=NA),
@@ -64,9 +64,9 @@ map_Bham <- function(df,var){
 
 # LODES by census block group -----------------------
 # all private jobs, by workplace block
-downl_LODES_wp <- function(year, st){
+downl_LODES_wp <- function(seg,year, st){
   temp <- tempfile()
-  download.file(paste0("https://lehd.ces.census.gov/data/lodes/LODES7/",st,"/wac/",st,"_wac_S000_JT02_",year,".csv.gz"), temp)
+  download.file(paste0("https://lehd.ces.census.gov/data/lodes/LODES7/",st,"/wac/",st,"_wac_",seg,"_JT02_",year,".csv.gz"), temp)
   data <- read.csv(gzfile(temp))
   unlink(temp)
   return(data)
@@ -146,7 +146,9 @@ Bham_jobhubs <- tract_od_Bham%>%
   summarise_if(is.numeric, sum)%>%
   group_by(nb)%>%
   mutate_if(is.numeric,function(x)(x/sum(x)))%>%
-  top_n(20, S000)
+  # S000: all jobs
+  # SE01: earnings $1250/month or less  
+  top_n(20, SE01)
 
 # create map
 Bham_jobhubs <- map.cty %>%
@@ -164,24 +166,117 @@ jobhub_glabel <- Bham_jobhubs%>%
   summarise(share = sum(S000))
 
 # map access to jobhubs
-# map_Bham(Bham_jobhubs, "access_level")+
-#   geom_sf(data = jobhub_centroids,color = "red", size =1)+
-#   coord_sf(datum = NA)+
-#   scale_fill_manual(values = c("#bdd7e7","#0070c0","#08519c", "#003249"),
-#                     labels = c("0 - 1%","1 - 1.5%", "1.5 - 2.5%", "> 2.5%"),
-#                     name = "Share of workers\nby household tract")+
-#   facet_wrap(~nb,nrow = 2)+
-#   geom_text(data = jobhub_glabel, aes(x=-87,y=33.1,
-#                                label = paste0("% total = ",scales::percent(share)),
-#                                fill = NULL))
+map_Bham(Bham_jobhubs, "access_level")+
+  geom_sf(data = jobhub_centroids,color = "red", size =1)+
+  coord_sf(datum = NA)+
+  scale_fill_manual(values = c("#bdd7e7","#0070c0","#08519c", "#003249"),
+                    labels = c("0 - 1%","1 - 1.5%", "1.5 - 2.5%", "> 2.5%"),
+                    name = "Share of workers\nby household tract")+
+  facet_wrap(~nb,nrow = 2)+
+  geom_text(data = jobhub_glabel, aes(x=-87,y=33.1,
+                               label = paste0("% total = ",scales::percent(share)),
+                               fill = NULL))
+
+
+# low income density
+tract_wp_lowinc <- downl_LODES_wp("SE01",2015,"al")
+
+tract_wp_lowinc <- tract_wp_lowinc%>%
+  mutate(GEOID = substr(padz(as.character(w_geocode),15),1,12))%>%
+  filter(substr(GEOID,1,5)==county_FIPS)%>%
+  group_by(GEOID)%>%
+  summarise_if(is.numeric, sum)
+  
+Bham_density_lowinc <- density %>%
+  filter(year==2015)%>%
+  filter(naics == "00")%>%
+  filter(cntyfips == county_FIPS)%>%
+  left_join(tract_wp_lowinc,by = "GEOID")%>%
+  mutate(GEOID = substr(GEOID,1,11))%>%
+  group_by(GEOID, year)%>%
+  # filter(GEOID %in% nb_Bham)%>%
+  summarise(job_tot = sum(job_tot, na.rm = T),
+            landarea = sum(landarea, na.rm = T),
+            density = job_tot/landarea)%>%
+  select(-job_tot)%>%
+  spread(year,density)
 
 # Capital Access -----------------------------------------------------------
 # employment by workplace tracts 
-tract_emp <- downl_LODES_wp(2015, "al")
-tract_emp <- tract_emp%>%
+tract_emp <- downl_LODES_wp("S000",2015,"al")
+
+tract_wp_emp <- tract_emp%>%
   mutate(GEOID = substr(padz(as.character(w_geocode),15),1,11))%>%
   group_by(GEOID)%>%
-  summarise(tot.emp = sum(C000, na.rm = T))
+  summarise_if(is.numeric, sum)%>%
+  rename(tot.emp = C000)%>%
+  mutate(lowinc.emp = CE01+CE02,
+         lowedu.emp = CD01+CD02,
+         tradable.emp = CNS01+CNS02+CNS05+CNS09+CNS10+CNS12+CNS13)%>%
+  right_join(Bham_density[c("GEOID","landarea")], by = "GEOID")
+
+tract_wp_map <- tract_wp_emp%>%
+  select(GEOID, tot.emp, lowinc.emp, lowedu.emp, tradable.emp, landarea)%>%
+  mutate(tot.dst = tot.emp/landarea,
+         lowinc.dst = lowinc.emp/landarea,
+         lowedu.dst = lowedu.emp/landarea,
+         tradable.dst = tradable.emp/landarea,
+         lowinc.share = lowinc.emp/tot.emp,
+         lowedu.share = lowedu.emp/tot.emp,
+         tradable.share = tradable.emp/tot.emp)%>%
+  filter(substr(GEOID,1,5)==county_FIPS)%>%
+  mutate(tot.dst_level = cut(tot.dst,c(0,15,100,500,3000,8500,Inf)),
+         lowinc.dst_level = cut(lowinc.dst, c(0,15,100,500,3000,8500,Inf)),
+         lowedu.dst_level = cut(lowedu.dst, c(0,15,100,500,3000,8500,Inf)),
+         tradable.dst_level = cut(tradable.dst,c(0,15,100,500,3000,8500,Inf)))%>%
+  left_join(map.cty, by = "GEOID")
+
+# # explore interactive map -------
+# tract_wp_map <- st_as_sf(tract_wp_map)
+# m1 <- mapview(tract_wp_map, zcol = "tradable.dst_level")
+# m2 <- mapview(tract_wp_map, zcol = "lowedu.dst_level")
+# 
+# # and sync
+# sync(m1, m2)
+
+# tract maps -------
+map_Bham(tract_wp_map,"lowedu.dst_level")+
+  scale_fill_brewer(palette = "YlOrRd",
+                    name = "Job density (jobs per sq mi)",
+                    label = c("Very Low: < 15","Low: 15 - 100", "Moderate: 100 - 500","High: 500 - 3000", "Very High:> 3000"))+
+  ggtitle("Density of jobs for workers with education attainment: high school or below")
+
+map_Bham(tract_wp_map,"lowinc.dst_level")+
+  scale_fill_brewer(palette = "YlOrRd",
+                    name = "Job density (jobs per sq mi)",
+                    label = c("Very Low: < 15","Low: 15 - 100", "Moderate: 100 - 500","High: 500 - 3000", "Very High:> 3000"))+
+  ggtitle("Density of jobs with earnings $3333/month or less")
+
+map_Bham(tract_wp_map,"tradable.dst_level")+
+  scale_fill_brewer(palette = "YlOrRd",
+                    label = c("Very Low: < 15","Low: 15 - 100", "Moderate: 100 - 500","High: 500 - 3000", "Very High:> 3000"),
+                    name = "Job density (jobs per sq mi)")+
+  ggtitle("Density of jobs in tradable industries")
+
+map_Bham(tract_wp_map,"tot.dst_level")+
+  scale_fill_brewer(palette = "YlOrRd",
+                    # label = c("Very Low: < 15","Low: 15 - 100", "Moderate: 100 - 500","High: 500 - 3000", "Very High:> 3000"),
+                    name = "Job density (jobs per sq mi)")+
+  ggtitle("Density of all jobs")
+
+map_Bham(tract_wp_map%>%
+           filter(tradable.dst >500)%>%
+           filter(lowinc.dst>500)%>%
+           filter(lowedu.dst>500),
+         "tot.dst_level")+
+  scale_fill_brewer(palette = "YlOrRd",
+                    label = c("High: 500 - 3000", "Very High: 3000 - 8000", "Extremely High: > 8000"),
+                    name = "Total job density (jobs per sq mi)")+
+  ggtitle("Tracts with density of jobs  higher than 500 in tradable industries, for low income, and for low education workers")
+
+library(mapview)
+
+mapview()
 
 # FDIC
 Bham_FDIC <- datafiles$MSA_SMEloan$FDIC_matched %>%
@@ -652,6 +747,8 @@ b_une <- acs_us$B23025_005E/acs_us$B23025_003E
 b_phlth <- 12.1
 b_mhlth <- 11.7
 b_chetty <- 0.2000008005
+# AL state average
+b_school <- 0.4429794
 
 tract_share("PHLTH", b_phlth)
 tract_share("MHLTH", b_mhlth)
@@ -666,7 +763,7 @@ pop_share("poverty", b_poverty, "pop")
 pop_share("une", b_une, "pop")
 pop_share("no_vehicle", b_novehicle, "pop")
 pop_share("kfr_top20_pooled_pooled_mean", b_chetty, "pop")
-pop_share("TRACTSCORE_H",0.2,"n_students",F)
+pop_share("TRACTSCORE_H",b_school,"n_students")
 
 Bham_tract_all<- Bham_tract_all%>%
   mutate(broadband = as.numeric(as.character(Broadband_level)))
