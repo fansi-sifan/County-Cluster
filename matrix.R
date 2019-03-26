@@ -1,7 +1,7 @@
 # Author: Sifan Liu
 # Date: Thu Feb 21 14:17:15 2019
 # --------------
-pkgs <- c('tidyverse')
+pkgs <- c('tidyverse',"SifanLiu")
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -9,6 +9,9 @@ if(any(!check)){
     install.packages(pkgs.missing)
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
+
+# load loan data files
+load("Temp data/SBA_loan_cleaned.Rda")
 
 SBIR_MSA <- loan_datafiles$SSTR_matched%>%
   filter(Award.Year>=2011 & Award.Year<2017)%>%
@@ -48,6 +51,7 @@ temp <- plyr::join_all(list(
   type = "inner"
 )
 # education attainment
+library(censusapi)
 edu <- c("S1501_C02_012E", "S1501_C02_009E", "S1501_C02_010E","S1501_C02_011E")
 t_edu <- GetACS("acs/acs5/subject",edu, 'msa', vintage = 2016)
 
@@ -64,9 +68,10 @@ t <- temp %>%
   mutate(patent_pc = Total/pop2016,
          SBIR_pc = amt.tot/pop2016,
          UnivRD_pc = RD_amt/pop2016) %>%
-  select(cbsa, metro_name = MSA, pop2016,
+  select(cbsa, metro_name = MSA,
+         young_firm_share = young_share, 
+         pop2016,
          patent_complex = complex,
-         young_firm_share = young_share,
          patent_pc,SBIR_pc,UnivRD_pc,
          VC_pc = value,
          Inc_pc = I5HGC_Density) %>%
@@ -126,7 +131,7 @@ ggplot(t_alt, aes(x = patent_pc*1000, y = `Output per Person`))+
   
   # correlation matrix -------------------
 # install.packages('corrplot')
-# library(corrplot)
+library(corrplot)
 
 M <- cor(t[3:11],use = "pairwise.complete.obs")
 head(round(M,2))
