@@ -10,6 +10,22 @@ if(any(!check)){
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
 
+SBIR_MSA <- loan_datafiles$SSTR_matched%>%
+  filter(Award.Year>=2011 & Award.Year<2017)%>%
+  group_by(county14)%>%
+   summarise(amt.tot = sum(Award.Amount, na.rm = T),
+            count = n())%>%
+  mutate(FIPS = padz(county14,5))%>%
+  left_join(msa_ct_FIPS[c("cbsa","FIPS")],by = "FIPS")%>%
+  group_by(cbsa)%>%
+  summarise(amt.tot = sum(amt.tot),
+            count = sum(count))
+
+UnivRD_MSA <- read.csv("source/NSF_univ.csv")%>%
+  mutate(cbsa=padz(cbsacode,5))%>%
+  group_by(cbsa)%>%
+  summarise(RD_amt = sum(`Deflated.Total.R.D.Expenditures.in.All.Fields.Sum.`, na.rm = T))
+
 # relationship between patents and startup activities ------------------------------
 temp <- plyr::join_all(list(
   read.csv('source/USPTO_msa.csv') %>%
@@ -18,31 +34,43 @@ temp <- plyr::join_all(list(
     mutate(cbsa = substr(as.character(ID.Code),2,6)),
   read.csv('source/Complexity_msa.csv') %>%
     mutate(cbsa = as.character(cbsa)),
+  read.csv('source/young_firms.csv')%>%
+    spread(indicator, value)%>%
+    mutate(young_share = `Employment at firms 0-5 years old`/Jobs),
   read.csv('source/VC.csv') %>%
     filter(round == "Total VC" & measure == "Capital Invested ($ M) per 1M Residents") %>%
     mutate(cbsa = as.character(cbsa13)),
+  SBIR_MSA,UnivRD_MSA,
   read.csv("source/I5HGC_density.csv")%>%
     mutate(cbsa = as.character(CBSA))),
+    
   by = "cbsa",
   type = "inner"
 )
-
 # education attainment
-edu <- c("S1501_C02_012E", "S1501_C02_015E")
+edu <- c("S1501_C02_012E", "S1501_C02_009E", "S1501_C02_010E","S1501_C02_011E")
 t_edu <- GetACS("acs/acs5/subject",edu, 'msa', vintage = 2016)
-names(t_edu)<-c("cbsa","BA_25", "BA")
+
+t_edu <- t_edu%>%
+  mutate(college_share = S1501_C02_012E+S1501_C02_012E,
+         HSabove_share = college_share + S1501_C02_009E+S1501_C02_010E,
+         cbsa = metropolitan_statistical_area_micropolitan_statistical_area)%>%
+  select(-contains("S1501"),-contains("metro"))
 
 #combine
 t <- temp %>% 
   left_join(read.csv("../../R/xwalk/msa.pop.csv")%>%
                      mutate(cbsa = as.character(cbsa)), by = "cbsa") %>%
-  mutate(patent_pc = Total/pop2016) %>%
+  mutate(patent_pc = Total/pop2016,
+         SBIR_pc = amt.tot/pop2016,
+         UnivRD_pc = RD_amt/pop2016) %>%
   select(cbsa, metro_name = MSA, pop2016,
          patent_complex = complex,
-         patent_pc,
+         young_firm_share = young_share,
+         patent_pc,SBIR_pc,UnivRD_pc,
          VC_pc = value,
          Inc_pc = I5HGC_Density) %>%
-  inner_join(MM %>% mutate(cbsa = as.character(`CBSA`)), by = "cbsa") %>%
+  # inner_join(MM %>% mutate(cbsa = as.character(`CBSA`)), by = "cbsa") %>%
   left_join(t_edu, by = "cbsa")
 
 # write.csv(t, "result/patent_startup.csv")
@@ -97,7 +125,18 @@ ggplot(t_alt, aes(x = patent_pc*1000, y = `Output per Person`))+
 
   
   # correlation matrix -------------------
-# cormat <- round(cor(t[4:7]),2)
-# melted_cormat <- reshape2::melt(cormat)
-# ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
-#   geom_tile()
+# install.packages('corrplot')
+# library(corrplot)
+
+M <- cor(t[3:11],use = "pairwise.complete.obs")
+head(round(M,2))
+
+corrplot(M, method = "color", type ="upper",
+         addCoef.col = "black", tl.col = "black",tl.srt=45)
+
+# fit
+
+fit <- lm(young_firm_share ~ pop2016+patent_complex+patent_pc+SBIR_pc+UnivRD_pc+VC_pc+Inc_pc+college_share, data = t)
+
+summary(fit)
+
