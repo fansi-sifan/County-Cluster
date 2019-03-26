@@ -15,13 +15,13 @@ if(any(!check)){
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
 
-
 # Sys.setenv(CENSUS_KEY = KEY)
 # census_api_key(KEY, overwrite = FALSE, install = TRUE)
 # readRenviron("~/.Renviron")
-# Sys.getenv("CENSUS_KEY")
+# key = Sys.getenv("CENSUS_API_KEY")
 # apis <- listCensusApis()
 # geo <- listCensusMetadata(name = "acs/acs5",vintage = 2016, type = "geography")
+
 
 
 # MAIN ===================
@@ -45,7 +45,8 @@ GetACS <- function(name,varlist,geotype, time = NULL, vintage = NULL){
                     vintage = vintage,
                     vars = varlist,
                     region = region,
-                    time = time)
+                    time = time, 
+                    key = Sys.getenv("CENSUS_API_KEY"))
   
   return(data)
 }
@@ -136,8 +137,8 @@ responseFormat <- function(raw) {
 }
 
 
-apiurl <- "https://api.census.gov/data/timeseries/qwi/sa"
-getQWI <- function(x)responseFormat(apiParse(req(key, get, region, regionin, time)))httr::GET(apiurl,
+qwi_api_url <- "https://api.census.gov/data/timeseries/qwi/sa"
+getQWI <- function(x)responseFormat(apiParse(req(key, get, region, regionin, time)))httr::GET(qwi_api_url,
                                                                                               query = list(key = CENSUS_KEY, get = get, 
                                                                                                            "for" = region,"in" = regionin, 
                                                                                                            time=time,
@@ -145,3 +146,11 @@ getQWI <- function(x)responseFormat(apiParse(req(key, get, region, regionin, tim
                                                                                                            # industry="23",industry ="31-33",
                                                                                                            firmage=1,firmage=2,firmage=3,firmage=4,firmage=5))
 
+
+# 
+# ase_api_url <- "https://api.census.gov/data/2014/ase/csa?get=RACE_GROUP,RACE_GROUP_TTL,SEX,SEX_TTL,NAICS2012,NAICS2012_TTL,GEO_TTL,FIRMPDEMP&for=metropolitan%20statistical%20area/micropolitan%20statistical%20area:13820"
+# 
+# ase_api_url <- "https://api.census.gov/data/2014/ase/csa?get=RACE_GROUP,RACE_GROUP_TTL,SEX,SEX_TTL,NAICS2012,NAICS2012_TTL,GEO_TTL,YEAR,FIRMPDEMP&for=metropolitan%20statistical%20area/micropolitan%20statistical%20area:13820"
+# 
+# test <- GET(ase_api_url)
+# temp <- content(test)
