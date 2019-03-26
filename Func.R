@@ -1,7 +1,7 @@
 # Author: Sifan Liu
 # Date: Wed Feb 27 12:16:17 2019
 # --------------
-pkgs <- c('tigris', "rgdal",'maptools', 'tidyverse', "ggmap", "maps", "grid", "gridExtra",'rgeos','broom', 'ggrepel')
+pkgs <- c('SifanLiu','tidyverse','tigris', "rgdal",'maptools',  "ggmap", "maps", "grid", "gridExtra",'rgeos','broom', 'ggrepel')
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -10,42 +10,6 @@ if(any(!check)){
   check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
 
-# FUNCTIONS =========================================================
-
-# add leading zeros
-padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
-
-# NA values
-na.share <- function(df,col)(sum(is.na(df[[col]]))/length(df[[col]]))
-
-# check distribution
-range <- function(df,col)(summary(as.factor(df[[col]])))
-
-# quickly summarize factor levels
-sfactor <- function(x)summary(as.factor(as.character(x)))
-
-# plot themes
-pthemes <- theme(rect = element_rect(fill = "#D9D9D9", colour=NA),
-                 panel.background = element_rect(fill = "#D9D9D9",colour = NA),
-                 plot.background = element_rect(fill = "#D9D9D9", colour = NA),
-                 panel.grid = element_blank(),
-                 legend.background = element_rect(fill = "transparent"),
-                 legend.key = element_rect(fill = "transparent", color = NA),
-                 legend.box.background = element_rect(fill = "transparent", colour = NA),
-                 text = element_text(size = 15,family ="sans" ), 
-                 axis.text = element_text(size = 12, family = "sans"),
-                 plot.title = element_text(hjust = 0.5),
-                 axis.ticks = element_blank()
-)
-
-# bar plot with title and highlights
-bar_plot <- function(df,title, HL){
-  ggplot(df %>% filter(!is.na(value)), aes(x = reorder(metro,value), y = value, fill = HL))+
-    geom_bar(stat = "identity")+
-    coord_flip()+
-    labs(title = title, x = NULL,y = NULL)+
-    scale_fill_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)
-}
 
 # SMEloans plot, peer vs Bham
 opr <- function(df){
@@ -102,9 +66,10 @@ Peers <- readxl::read_xlsx('result/13820_Market Assessment.xlsx', sheet = "Peers
 msa_ct_FIPS <- read.csv('V:/Sifan/R/xwalk/county2msa.csv') %>%
   mutate(fips = paste0(padz(fipsstatecode,2), padz(fipscountycode,3)),
          COUNTY = trimws(toupper(gsub("County","",countycountyequivalent))))%>%
-  filter(cbsacode %in% Peers$cbsa)%>%
+  # filter(cbsacode %in% Peers$cbsa)%>%
   mutate(cbsa = as.character(cbsacode))%>%
   select(cbsa, FIPS = fips, metro = cbsatitle, county = COUNTY)
+
 msa_ct_fips <- (msa_ct_FIPS%>%filter(cbsa==msa_FIPS))$FIPS
 
 msa100_FIPS <- as.character((read.csv("V:/Sifan/R/xwalk/top100metros.csv") %>% filter(top100==1))[["GEO.id2"]])
