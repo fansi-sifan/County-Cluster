@@ -229,40 +229,63 @@ ggplot(firm_BDS,
 # load(paste0("result/",msa_FIPS,"_Market Assessment.Rdata"))
 load("Temp data/SBA_loan_cleaned.Rda")
 
-SSTR <- loan_datafiles$SSTR_matched%>%
-  filter(Award.Year>=2004)%>%
-  # select(Company, Phase, Program, Award.Year, Award.Amount, Woman.Owned, Socially.and.Economically.Disadvantaged)%>%
-  filter(county14==1073)%>%
-  mutate(gender = ifelse(Woman.Owned == "Y",1,0))%>%
-  group_by(Award.Year)%>%
-  summarise(Woman = mean(gender))
-  
-# sfactor(loan_datafiles$SSTR_matched$Woman.Owned)
+SSTR_summary <- loan_datafiles$SSTR_matched%>%
+  select(county14,Company, Phase, Program, Year = Award.Year,Hubzone.Owned, Socially.and.Economically.Disadvantaged, Woman.Owned)%>%
+  mutate(name = tolower(gsub("[[:punct:]]+","",Company)))%>%
+  mutate(Hub = ifelse(Hubzone.Owned=="Y",1,0),
+         gender = ifelse(Woman.Owned=="Y",1,0),
+         disadv = ifelse(Socially.and.Economically.Disadvantaged=="Y",1,0))%>%
+  select(-contains("."))%>%
+  group_by(name)%>%mutate(count_awards=n())
 
-loan_datafiles$SSTR_matched%>%
-  mutate(name = tolower(Company))%>%
-  group_by(name)%>%
-  summarise(amt.tot = sum(Award.Amount, na.rm = T),
-            count = n())%>%
-  mutate(share = amt.tot/sum(amt.tot))%>%
-  arrange(-share)
+# summary functions
+SSTR_type <- function(df){
+  df%>%
+    group_by(Phase,Program,county14)%>%
+    summarise(count = n())%>%
+    ungroup()%>%
+    mutate(share = count/sum(count))
+}
 
-write.csv(SSTR, "result/SSTR.csv")
+SSTR_gender <- function(df){
+  df %>%
+    select(county14,name,Year,count_awards,Hub:disadv)%>%
+    gather(key,value, Hub:disadv)%>%
+    # remove 2007 2008 inconsistency
+    filter(Year!=2008 & Year!=2007)%>%
+    group_by(name,key,county14)%>%
+    # assume the latest year is most accurate
+    arrange(Year)%>%
+    slice(n())%>%
+    group_by(key,county14)%>%
+    summarise(share.company = mean(value),
+              share.award= weighted.mean(value, count_awards))
+}
 
-sfactor((SSTR%>%filter(county14==1073))$Socially.and.Economically.Disadvantaged)
-sfactor((SSTR%>%filter(county14==1073))$Woman.Owned)
-sfactor(SSTR$Company)
+# hist(t$value)
+# sfactor(t$Year)
 
+# summary for nation, Jefferson County, and Davidson County
+df.list <- list(SSTR_summary %>% mutate(county14=0),
+                SSTR_summary %>% filter(county14==1073),
+                SSTR_summary %>% filter(county14==47037))
 
-loan_datafiles$SSTR_matched%>%
-  filter(county14==47037 | county14==1073)%>%
-  filter(Award.Year>=2011 & Award.Year<2017)%>%
-  mutate(name = tolower(Company))%>%
-  mutate(gender = ifelse(Woman.Owned == "Y",1,0))%>%
-  group_by(county14, name)%>%
-  summarise(Woman = mean(gender))%>%
-  summarise(count = n(),
-            amt = sum(Award.Amount, na.rm = T))
+df.list <- map(df.list,filter,Year>2010)
+
+type <- map_df(df.list,SSTR_type)%>%
+  arrange(Program, Phase)
+
+demo <- map_df(df.list,SSTR_gender)%>%
+  arrange(key)
+
+bbplot(type%>%mutate(type = paste(Program,Phase,sep=", ")))+
+  geom_bar(aes(x=as.factor(county14),y=share,fill = type), stat = "identity",position = "fill")+
+  scale_y_continuous(labels = scales::percent)+
+  scale_x_discrete(name = "places")+
+  coord_flip()
+
+type%>%select(-share)%>%
+  spread(county14,count)
 
 # SBA ===========================================
 sba_msa <- read_delim("source/msa_3digitnaics_2012.txt",delim = ",")
