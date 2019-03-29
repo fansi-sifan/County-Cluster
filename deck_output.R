@@ -11,6 +11,10 @@ if(any(!check)){
   check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
 } 
 
+# read doc ---
+# https://cran.r-project.org/web/packages/officer/vignettes/officer_reader.html
+# temp <- read_docx("../../Data warehouse_Solution bank/Solution Bank/METRO solutions template.docx") 
+# content <- docx_summary(temp)
 
 # Read slide template and charts ======================
 pptx <- read_pptx("V:/Building Inclusive Cities/Birmingham/Market Assessment/test.pptx")
