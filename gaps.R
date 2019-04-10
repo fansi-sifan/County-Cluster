@@ -230,7 +230,8 @@ ggplot(firm_BDS,
 load("Temp data/SBA_loan_cleaned.Rda")
 
 SSTR_summary <- loan_datafiles$SSTR_matched%>%
-  select(county14,Company, Phase, Program, Year = Award.Year,Hubzone.Owned, Socially.and.Economically.Disadvantaged, Woman.Owned)%>%
+  select(county14,Company, Phase, Program, Year = Award.Year,amt = Award.Amount,
+         Hubzone.Owned, Socially.and.Economically.Disadvantaged, Woman.Owned)%>%
   mutate(name = tolower(gsub("[[:punct:]]+","",Company)))%>%
   mutate(Hub = ifelse(Hubzone.Owned=="Y",1,0),
          gender = ifelse(Woman.Owned=="Y",1,0),
@@ -258,19 +259,28 @@ SSTR_gender <- function(df){
     arrange(Year)%>%
     slice(n())%>%
     group_by(key,county14)%>%
-    summarise(share.company = mean(value),
+    summarise(count.company = n(),
+              count.awards = sum(count_awards),
+              share.company = mean(value),
               share.award= weighted.mean(value, count_awards))
 }
 
+SSTR_all <- function(df){
+  df%>%
+    group_by(county14)%>%
+    summarise(count = n(),
+              amt = sum(amt, na.rm = T))
+  }
 # hist(t$value)
 # sfactor(t$Year)
 
 # summary for nation, Jefferson County, and Davidson County
-df.list <- list(SSTR_summary %>% mutate(county14=0),
-                SSTR_summary %>% filter(county14==1073),
-                SSTR_summary %>% filter(county14==47037))
 
-df.list <- map(df.list,filter,Year>2010)
+
+df.list <- purrr::map(list(SSTR_summary %>% mutate(county14=0),
+                           SSTR_summary %>% filter(county14==1073),
+                           SSTR_summary %>% filter(county14==47037)),
+                      filter,Year > 2010)
 
 type <- map_df(df.list,SSTR_type)%>%
   arrange(Program, Phase)
@@ -278,8 +288,21 @@ type <- map_df(df.list,SSTR_type)%>%
 demo <- map_df(df.list,SSTR_gender)%>%
   arrange(key)
 
-bbplot(type%>%mutate(type = paste(Program,Phase,sep=", ")))+
-  geom_bar(aes(x=as.factor(county14),y=share,fill = type), stat = "identity",position = "fill")+
+map_df(df.list, SSTR_all)
+
+# peer distribution
+temp <- SSTR_summary %>%
+  mutate(FIPS = padz(county14,5))%>%
+  right_join(Peers[c("FIPS","county")])%>%
+  # filter(FIPS%in%Peers$FIPS)%>%
+  filter(Year>2010)%>%
+  group_by(Phase,Program,county)%>%
+  summarise(count = n())%>%
+  ungroup()%>%
+  mutate(share = count/sum(count))
+
+bbplot(temp%>%mutate(type = paste(Program,Phase,sep=", ")))+
+  geom_bar(aes(x=reorder(county,share),y=share,fill = type), stat = "identity",position = "fill")+
   scale_y_continuous(labels = scales::percent)+
   scale_x_discrete(name = "places")+
   coord_flip()
@@ -382,4 +405,90 @@ lw_summary <- lw_df %>%
   group_by(edu, race,geo)%>%
   summarise_if(is.numeric, sum)
 
+# gap charts ====================================================================
+# paste data from spreadsheet datapasta::
 
+temp_p <- tibble::tribble(
+                           ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
+          "tradable_young_firm",     1087,                342,                  87,
+          "tradable_young_jobs",     4673,               4483,                1582,
+                     "startups",       56,                  0,                  50,
+                         "SBIR",       42,                 65,                   0,
+                   "dense_jobs",   366000,              38000,               50000,
+                  "access_jobs",   231018,              26000,               21000
+          )
+
+# reshape data
+t_p <- temp_p %>%
+  mutate(type = "top")%>%
+  bind_rows(temp_p%>%mutate(to.match.the.U.S.= current,
+                          to.match.Nashville = current,
+                          current = NA,
+                          type = "bottom"))%>%
+  gather(gaps, value, current:to.match.Nashville)%>%
+  mutate(type = ifelse(gaps=="current","current",type))%>%
+  mutate(lab = ifelse(type=="top",paste0("+",value),value))
+
+temp_n <- tibble::tribble(
+                             ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
+            "lowwage_nocol_young",     9838,                136,                 344,
+              "lowwage_min_young",    14047,                105,                 401,
+              "oow_somecol_young",     3664,                937,                1163,
+                "oow_somecol_old",    10250,                  0,                1400,
+                  "oow_min_young",     7907,               1200,                1100
+            )
+
+  
+t_n <- temp_n %>%
+  mutate(type = "top")%>%
+  bind_rows(temp_n%>%mutate(to.match.the.U.S.= current - to.match.the.U.S.,
+                          to.match.Nashville = current - to.match.Nashville,
+                          current = NA,
+                          type = "bottom"))%>%
+  gather(gaps, value, current:to.match.Nashville)%>%
+  mutate(type = ifelse(gaps=="current","current",type))%>%
+  mutate(lab = ifelse(type=="bottom",paste0("-",value),value))
+
+t <-  bind_rows(t_p,t_n)
+temp <- bind_rows(temp_p,temp_n)
+
+var.p <- temp$var
+var.p <- "lowwage_nocol_young"
+# function to create bar plots and save
+gap_charts <- function(var.p){
+
+t <- t%>%filter(var==var.p)  
+
+bbplot(t[order(-t$value),],
+       aes(x=gaps, y = value,label = lab,
+           fill = factor(type,levels = c("current","top","bottom"))))+
+  geom_bar(stat = "identity")+
+  geom_text(aes(color = factor(type,levels = c("current","top","bottom"))),
+            size = 5, position = position_stack(vjust=0.5))+
+  scale_color_manual(values = c("current"="white",
+                                "top"="black",
+                                "bottom"="#D9D9D9"),guide = F)+
+  scale_fill_manual(values = c("top"="#ffc000",
+                               "current"="#003249",
+                               "bottom"="#D9D9D9"),guide = F)+
+  scale_x_discrete(limits = c("current","to.match.the.U.S.","to.match.Nashville"),
+                   labels = c("current"="Current BHM", 
+                              "to.match.the.U.S."="to match the U.S.", 
+                              "to.match.Nashville"="... Nashville"))+
+  scale_y_continuous(labels = NULL)+
+   # scale_fill_metro("cool", guide = F)+
+  labs(x = NULL, y = NULL)+
+  theme(axis.line.x.bottom = element_line(colour = "black"))
+}
+
+save_charts <- function(var.p){
+  ggsave(filename = paste0(var.p,".emf"),
+         width = 5,height = 1,dpi=500)
+}
+
+# save all plots
+# purrr::map(var.p,gap_charts)
+
+gap_charts("lowwage_min_young")
+gap_charts("lowwage_nocol_young")
+gap_charts("access_jobs")
