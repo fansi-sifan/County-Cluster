@@ -20,7 +20,7 @@ opr <- function(df){
     mutate(value = amt.tot/emp.tot*1000)
 }
 
-p_SME <- function(df,pgm){ggplot(data = df%>%filter(program==pgm), 
+p_SME <- function(df,pgm){bbplot(data = df%>%filter(program==pgm), 
                                  aes(x = year_range, y = value/5, fill = Bham))+
     geom_bar(stat = "identity", position = "dodge")+
     scale_fill_manual(name = element_blank(), 
@@ -28,7 +28,18 @@ p_SME <- function(df,pgm){ggplot(data = df%>%filter(program==pgm),
                       labels = c( "Peer average", paste(placename,countyname, sep = " /")))+
     labs(x = NULL, y = NULL)+
     facet_wrap(~geo, nrow = 1)+
-    pthemes%+%theme(legend.position = "bottom")}
+    theme(legend.position = "bottom")}
+
+
+# bar plot with title and highlights
+
+bar_plot <- function(df,title, HL){
+  bbplot(df %>% filter(!is.na(value)), aes(x = reorder(metro,value), y = value, fill = HL))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    labs(title = title, x = NULL,y = NULL)+
+    scale_fill_manual(values = c("#0070c0", "#ffc000"), guide = FALSE)
+}
 
 # SETUP =============================================================
 # assign geocodes for analysis ------------------------
@@ -73,6 +84,4 @@ msa_ct_FIPS <- read.csv('V:/Sifan/R/xwalk/county2msa.csv') %>%
 msa_ct_fips <- (msa_ct_FIPS%>%filter(cbsa==msa_FIPS))$FIPS
 
 msa100_FIPS <- as.character((read.csv("V:/Sifan/R/xwalk/top100metros.csv") %>% filter(top100==1))[["GEO.id2"]])
-
-
 
