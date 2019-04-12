@@ -406,39 +406,41 @@ lw_summary <- lw_df %>%
   summarise_if(is.numeric, sum)
 
 # gap charts ====================================================================
-# paste data from spreadsheet datapasta::
-
+# paste data from spreadsheet datapasta:: -----------
+# positive changes
 temp_p <- tibble::tribble(
-                           ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
-          "tradable_young_firm",     1087,                342,                  87,
-          "tradable_young_jobs",     4673,               4483,                1582,
-                     "startups",       56,                  0,                  50,
-                         "SBIR",       42,                 65,                   0,
-                   "dense_jobs",   366000,              38000,               50000,
-                  "access_jobs",   231018,              26000,               21000
-          )
+                             ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
+            "tradable_young_firm",     1100,                340,                  90,
+            "tradable_young_jobs",     4700,               4500,                1600,
+                       "startups",       56,                  0,                  50,
+                           "SBIR",       42,                 65,                   0,
+                     "dense_jobs",   366000,              38000,               50000,
+                    "access_jobs",   231000,              26000,               21000
+            )
+# negative changes
+temp_n <- tibble::tribble(
+                             ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
+            "lowwage_nocol_young",     9800,                140,                 340,
+              "lowwage_min_young",    14000,                100,                 400,
+              "oow_somecol_young",     3700,                940,                1160,
+                "oow_somecol_old",    10250,                  0,                1400,
+                  "oow_min_young",     7900,               1200,                1100
+            )
 
-# reshape data
+
+# reshape data -------------------
+library("scales")
+
 t_p <- temp_p %>%
   mutate(type = "top")%>%
   bind_rows(temp_p%>%mutate(to.match.the.U.S.= current,
-                          to.match.Nashville = current,
-                          current = NA,
-                          type = "bottom"))%>%
+                            to.match.Nashville = current,
+                            current = NA,
+                            type = "bottom"))%>%
   gather(gaps, value, current:to.match.Nashville)%>%
   mutate(type = ifelse(gaps=="current","current",type))%>%
-  mutate(lab = ifelse(type=="top",paste0("+",value),value))
+  mutate(lab = ifelse(type=="top",paste0("+ ",comma(value)),comma(value)))
 
-temp_n <- tibble::tribble(
-                             ~var, ~current, ~to.match.the.U.S., ~to.match.Nashville,
-            "lowwage_nocol_young",     9838,                136,                 344,
-              "lowwage_min_young",    14047,                105,                 401,
-              "oow_somecol_young",     3664,                937,                1163,
-                "oow_somecol_old",    10250,                  0,                1400,
-                  "oow_min_young",     7907,               1200,                1100
-            )
-
-  
 t_n <- temp_n %>%
   mutate(type = "top")%>%
   bind_rows(temp_n%>%mutate(to.match.the.U.S.= current - to.match.the.U.S.,
@@ -447,13 +449,13 @@ t_n <- temp_n %>%
                           type = "bottom"))%>%
   gather(gaps, value, current:to.match.Nashville)%>%
   mutate(type = ifelse(gaps=="current","current",type))%>%
-  mutate(lab = ifelse(type=="bottom",paste0("-",value),value))
+  mutate(lab = ifelse(type=="top",paste0("- ",comma(value)),scales::comma(value)))
 
+# bind together
 t <-  bind_rows(t_p,t_n)
 temp <- bind_rows(temp_p,temp_n)
 
-var.p <- temp$var
-var.p <- "lowwage_nocol_young"
+
 # function to create bar plots and save
 gap_charts <- function(var.p){
 
@@ -478,17 +480,25 @@ bbplot(t[order(-t$value),],
   scale_y_continuous(labels = NULL)+
    # scale_fill_metro("cool", guide = F)+
   labs(x = NULL, y = NULL)+
-  theme(axis.line.x.bottom = element_line(colour = "black"))
+  theme(axis.line.x.bottom = element_line(colour = "black"),
+        plot.margin = unit(c(0.5,0,0,0),"cm"))
 }
 
+# test
+gap_charts("lowwage_min_young")
+gap_charts("access_jobs")
+
+# save charts
 save_charts <- function(var.p){
-  ggsave(filename = paste0(var.p,".emf"),
+  ggsave(filename = paste0(var.p,".emf"),path = "plots",
          width = 5,height = 1,dpi=500)
 }
 
-# save all plots
-# purrr::map(var.p,gap_charts)
+save_charts("access_jobs")
 
-gap_charts("lowwage_min_young")
-gap_charts("lowwage_nocol_young")
-gap_charts("access_jobs")
+# save all plots
+purrr::map(temp$var,function(x){
+  gap_charts(x)
+  save_charts(x)
+})
+
