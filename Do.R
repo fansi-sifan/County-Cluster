@@ -173,6 +173,15 @@ I5HGC <- datafiles$PeerMetro_I5HGC %>%
   mutate(HL = c(cbsa == msa_FIPS))
 
 # SME loans
+# function to summarise SME data
+opr <- function(df){
+  df %>%
+    group_by(Bham, program, year_range, emp.tot, emp.traded)%>%
+    summarise(amt.tot = sum(as.numeric(amt.tot), na.rm = TRUE))%>%
+    filter(!is.na(year_range))%>%
+    mutate(value = amt.tot/emp.tot*1000)
+}
+
 SMEloans <- bind_rows(PeerMetro_SMEloans %>%
                     right_join(Peer_traded, by = c('cbsa'='FIPS')) %>%
                     group_by(Bham = (cbsa == msa_FIPS),year_range,program) %>%
