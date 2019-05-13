@@ -4,8 +4,8 @@
 
 source("Func.R")
 
-# VC ==========================================================================
-# Pitchbook NCVA downloads
+# VC ======================================================
+# [depreciated] Pitchbook NCVA downloads -------------------------------------------
 # VC <- read.csv('source/metro_VC.csv') %>%
 ## MSA definition change
 #   left_join(msa2msa, by = "MSA") %>%
@@ -25,126 +25,158 @@ source("Func.R")
 
 # write.csv(VC_xwalk, "source/VC_xwalk.csv")
 
+VC <- read.csv("http://startupsusa.org/global-startup-cities/js/d3map/data/gsr_map_final.csv")
 VC_xwalk <- read.csv("source/VC_xwalk.csv")
-VC <- read.csv("source/gsr_map_final.csv") %>%
+
+cbsa.VC <- VC %>%
   separate(name, c("MSA", "Country"), sep = ", ") %>%
   filter(Country == "United States") %>%
-  left_join(VC_xwalk, by = "MSA")
+  left_join(VC_xwalk, by = "MSA")%>%
+  mutate(code.cbsa = padz(cbsa13,5))
 
-write.csv(VC, "source/VC.csv")
+save(cbsa.VC, file = "source/cbsa.VC.Rdata")
 
-# Out of work =====================================================================
-OoW <- read.csv("source/OutOfWork_county.csv")
-OoW <- OoW %>% left_join(county2msa[c("fips", "st_cty_name")],
-  by = c("Jurisdiction" = "st_cty_name")
-)
-
-OoW_unmatched <- filter(OoW, is.na(fips))
-
-# GEOcoding
-source("V:/Sifan/R/code/add2FIPS.R")
-add2FIPS("New York-Northern New Jersey-Long Island, NY-NJ-PA")
-
-OoW_unmatched$fips <- sapply(OoW_unmatched[["Jurisdiction"]], add2FIPS)
-OoW_matched <- OoW %>% filter(!is.na(fips)) %>% mutate(fips = as.character(fips))
-OoW <- bind_rows(OoW_matched, OoW_unmatched)
-
-OoW <- left_join(OoW, county2msa[c("cbsacode", "fips")], by = "fips")
-write.csv(OoW, "source/OutOfWork_county.csv")
+# [Depreciated]Out of work =====================================================================
+# OoW <- read.csv("source/OutOfWork_county.csv")
+# OoW <- OoW %>% left_join(county2msa[c("fips", "st_cty_name")],
+#   by = c("Jurisdiction" = "st_cty_name")
+# )
+# 
+# OoW_unmatched <- filter(OoW, is.na(fips))
+# 
+# # GEOcoding
+# source("V:/Sifan/R/code/add2FIPS.R")
+# add2FIPS("New York-Northern New Jersey-Long Island, NY-NJ-PA")
+# 
+# OoW_unmatched$fips <- sapply(OoW_unmatched[["Jurisdiction"]], add2FIPS)
+# OoW_matched <- OoW %>% filter(!is.na(fips)) %>% mutate(fips = as.character(fips))
+# OoW <- bind_rows(OoW_matched, OoW_unmatched)
+# 
+# OoW <- left_join(OoW, county2msa[c("cbsacode", "fips")], by = "fips")
+# write.csv(OoW, "source/OutOfWork_county.csv")
 
 # NSf R&D =================================================================
-NSF_RD <- read.csv("source/NSF_univ.csv")
+inst.RD <- read.csv("https://www.nsf.gov/statistics/herd/data/csv/herd_2017.csv")
 
-NSF_RD_unique <- NSF_RD %>%
-  select(Zip, CITY, state) %>%
+load("V:/Sifan/SifanLiu/data/place2county.Rdata")
+
+# match by place name ---------------------------
+xwalk.placenm <- place2county %>%
+  select(name.place, label.state, name.county, code.county, code.state, afact, rank.share.county)
+
+inst_unique <- inst.RD %>%
+  filter(!inst_state_code %in% c("PR","GU"))%>%
+  select(inst_id, inst_city, inst_state_code, inst_zip) %>%
   unique() %>%
-  mutate(ZIP = padz(as.character(Zip), 5)) %>%
-  left_join(zip2county, by = "ZIP") %>%
-  mutate(st_cty_name = paste0(CITY, ", ", state))
-
-NSF_RD_unmatched <- filter(NSF_RD_unique, is.na(county))
-# Geocoding
-NSF_RD_unmatched$county <- sapply(NSF_RD_unmatched[["st_cty_name"]], add2FIPS)
-NSF_RD_unmatched <- bind_rows(NSF_RD_unmatched, NSF_RD_unmatched2, NSF_RD_unmatched3, NSF_RD_unmatched4) %>% filter(!is.na(county))
-
-# rbind
-NSF_RD_matched <- NSF_RD_unique %>%
-  filter(!is.na(county)) %>%
-  mutate(county = as.character(county))
-
-NSF_RD_unique <- bind_rows(NSF_RD_matched, NSF_RD_unmatched)
-NSF_RD <- NSF_RD %>%
-  left_join(NSF_RD_unique[c("Zip", "county")], by = "Zip") %>%
-  mutate(fips = padz(county, 5)) %>%
-  left_join(county2msa[c("fips", "cbsacode")], by = "fips")
-
-write.csv(NSF_RD, "source/NSF_univ.csv")
+  mutate(name.place = toupper(inst_city),
+         label.state = as.character(inst_state_code),
+         zcta5 = substr(inst_zip,1,5))%>%
+  mutate(name.place = ifelse(grepl("SAINT",name.place),
+                             gsub("SAINT","ST.",name.place),
+                             name.place))
+temp <- inst_unique %>%
+  left_join(xwalk.placenm,by = c("name.place","label.state"))
 
 
+# match by county name  ---------------------------
+xwalk.countynm <- place2county %>%
+  ungroup()%>%
+  mutate(name.place = toupper(gsub(".{3}$","",cntyname2)))%>%
+  select(name.place, label.state, code.county)%>%
+  unique()
+  
+inst_unique <- split_join_merge(inst_unique,xwalk.countynm,
+                           quo(code.county),c("name.place","label.state"))
+
+# match by zipcode  ---------------------------
+xwalk.zcta <- zip2county %>%
+  select(zcta5, afact.zip = afact, 
+         code.county = county14)
+
+inst2county <- split_join_merge(inst_unique,xwalk.zcta,
+                                quo(code.county),"zcta5")
+# test and save xwalk ---------------------------
+na.share(inst2county$code.county)
+
+# write.csv(inst2county, "V:/Sifan/R/xwalk/inst2county.csv")
+save(inst.RD,file = "source/inst.RD.Rdata")
+
+# create summary files for county  ---------------------------
+county.RD <- inst.RD %>%
+  left_join(inst2county, by = "inst_id")%>%
+  mutate(ifelse(is.na(afact),afact.zip,afact))%>%
+  group_by(code.county,name.county, year,questionnaire_no, question, row, column)%>%
+  summarise(value = sum(data*afact, na.rm = T))
+
+save(county.RD, file = "source/county.RD.Rdata")
+  
 # SSTR grant =================================================
 # SSTR read raw --------------------------------------------
-# SSTR_archive <- read.csv("https://query.data.world/s/n7cv53ycwjwcfaukfnbplz4n7ndb73", header=TRUE, stringsAsFactors=FALSE)
-SSTR_archive <- read.csv("../../SBA finance/SSTR/SBIR-STTR 1983-2017.csv", header = TRUE, stringsAsFactors = FALSE)
-### 2016, 2017
-SSTR_files <- grep(".xlsx", list.files(path = "../../SBA finance/SSTR", full.names = TRUE), value = TRUE)
-SSTR <- bind_rows(purrr::map(SSTR_files, readxl::read_xlsx))
-names(SSTR) <- make.names(names(SSTR))
-SSTR_all <- SSTR %>%
-  mutate_at(c("Solicitation.Year", "Award.Year", "Award.Amount", "Number.Employees"), as.numeric) %>%
-  bind_rows(SSTR_archive)
+# source: https://data.world/nerb/sbir-sttr-data, 118.6 MB
+url <- "https://query.data.world/s/v7fn3t52picjtvebum7i7s3eg5wxb5.xlsx"
+firm.SSTR <- readxl_online(url)
+# SSTR_archive <- read.csv("../../SBA finance/SSTR/SBIR-STTR 1983-2017.csv", header = TRUE, stringsAsFactors = FALSE)
+
+# clean up columns ----------------------------
+library(lubridate)
+
+firm.SSTR <- firm.SSTR %>%
+  mutate(name.firm = toupper(Company),
+         name.place = toupper(trimws(City)),
+         label.state = State,
+         zcta5 = substr(Zip,1,5),
+         award.year = as.numeric(`Award Year`)-25569) %>%
+  mutate(award.year = case_when(
+           grepl("January",`Award Year`) ~ as.numeric(str_sub(`Award Year`,-4,-1)),
+           is.numeric(award.year) ~ year(as_date(award.year)),
+           T ~ 0
+         ))
+
+
+# SSTR_files <- grep(".xlsx", list.files(path = "../../SBA finance/SSTR", full.names = TRUE), value = TRUE)
+# SSTR <- bind_rows(purrr::map(SSTR_files, readxl::read_xlsx))
+# names(SSTR) <- make.names(names(SSTR))
+# SSTR_all <- SSTR %>%
+#   mutate_at(c("Solicitation.Year", "Award.Year", "Award.Amount", "Number.Employees"), as.numeric) %>%
+#   bind_rows(SSTR_archive)
 # save(SSTR_all, file = "SSTR.Rda")
 
-# SSTR_clean -----------------------------------------------
 # load('SSTR.Rda')
 
-# first match by city
+# clean up the geographies ----------------------------
+firm.unique <- firm.SSTR %>%
+  select(name.firm, name.place, label.state, zcta5)%>%
+  unique()
 
-SSTR_all <- SSTR_all %>%
-  mutate(PLACE = trimws(toupper(City))) %>%
-  mutate(ZIP = padz(substr(Zip, 0, 5), 5))
+temp <- firm.unique %>% left_join(xwalk.placenm, by = c("name.place","label.state"))
+test <- split_join_merge(temp, xwalk2, quo(code.county),c("name.place","label.state"))
+firm2county <- split_join_merge(test, xwalk3, quo(code.county),"zcta5")
 
-SSTR_city <- SSTR_all %>%
-  select(PLACE, State) %>%
-  distinct() %>%
-  left_join(place2county, by = c("PLACE", "State"))
+na.share(firm2county$code.county)
 
-SSTR_city_matched <- SSTR_all %>%
-  left_join(SSTR_city[c("PLACE", "State", "county14")], by = c("PLACE", "State"))
+firm.SSTR <- firm.SSTR %>%
+  left_join(firm2county, by = "name.firm")
 
-SSTR_city_nomatch <- SSTR_city_matched %>%
-  filter(is.na(county14))
+county.SSTR <- firm.SSTR %>%
+  mutate(ifelse(is.na(afact),afact.zip,afact))%>%
+  group_by(code.county,name.county, award.year)%>%
+  summarise(value = sum(`Award Amount`*afact, na.rm = T))
 
-SSTR_zip <- SSTR_city_nomatch %>%
-  mutate(ZIP = padz(substr(Zip, 0, 5), 5)) %>%
-  select(ZIP, State) %>%
-  distinct() %>%
-  left_join(zip2county[c("ZIP", "county")], by = "ZIP")
-
-SSTR_zip_matched <- SSTR_city_nomatch %>%
-  left_join(SSTR_zip, by = c("ZIP", "State")) %>%
-  select(-county14) %>%
-  rename(county14 = county)
-
-SSTR_matched <- SSTR_city_matched %>%
-  filter(!is.na(county14)) %>%
-  bind_rows(SSTR_zip_matched)
-
-# save(SSTR_matched, file = "SSTR_matched.Rda")
-# SSTR_summary -----------------------------------------------
-SSTR_summary_cty <- SSTR_matched %>%
-  group_by(county14, State, Award.Year) %>%
-  summarise(
-    amt.tot = sum(Award.Amount, na.rm = TRUE),
-    count = n()
-  )
-
+save(firm.SSTR, file = "source/firm.SSTR.Rdata")
+save(county.SSTR, file = "source/county.SSTR.Rdata")
 
 # SBA loans ==================================================
 # SBA read raw -----------------------------------------------
-# SBA_7a <- readxl::read_excel("../../SBA finance/SBA/FOIA - 7(a)(FY2010-Present).xlsx", col_names = TRUE, skip = 1)
-# SBA_504<- readxl::read_excel("../../SBA finance/SBA/FOIA - 504 (FY1991-Present).xlsx", col_names = TRUE, skip = 1)
+# SBA_7a <- readxl_online("http://imedia.sba.gov/vd/general/foia/FOIA%20-%207(a)(FY2010-Present).xlsx")
+# SBA_504<- readxl_online("http://imedia.sba.gov/vd/general/foia/FOIA%20-%20504%20(FY1991-Present).xlsx")
+# 
 # SBA <- bind_rows(SBA_7a, SBA_504)
-# save(SBA, file = "SBA.Rda")
+# save(SBA, file = "source/firm.SBA.Rda")
+
+load("source/firm.SBA.Rda")
+
+str(SBA)
+
 
 # SBA clean --------------------------------------------------
 # load("SBA.Rda")
