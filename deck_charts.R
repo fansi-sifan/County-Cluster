@@ -189,6 +189,18 @@ p_opp <- bbplot(MSA_opp, aes(x = factor(Traded), y = share, fill = type)) +
   geom_bar(stat = "identity")
 
 # EXIM
+
+# function to plot bar charts for SME peer average comparison
+p_SME <- function(df,pgm){bbplot(data = df%>%filter(program==pgm), 
+                                 aes(x = year_range, y = value/5, fill = Bham))+
+    geom_bar(stat = "identity", position = "dodge")+
+    scale_fill_manual(name = element_blank(), 
+                      values = c("#0070c0", "#ffc000"), 
+                      labels = c( "Peer average", paste(placename,countyname, sep = " /")))+
+    labs(x = NULL, y = NULL)+
+    facet_wrap(~geo, nrow = 1)+
+    theme(legend.position = "bottom")}
+
 p_EXIM <- p_SME(SMEloans %>% mutate(value = value * emp.tot / emp.traded), "EXIM") +
   ggtitle("Average annual loan volume from Export-Import Bank\nper 1000 traded industries workers") +
   scale_y_continuous(labels = scales::dollar_format())
