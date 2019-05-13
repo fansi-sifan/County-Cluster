@@ -1,7 +1,7 @@
 # Author: Sifan Liu
 # Date: Fri Dec 28 13:40:50 2018
 # --------------
-pkgs <- c("httr", "tidyverse", "devtools",'tidycensus')
+pkgs <- c("SifanLiu","httr", "tidyverse", "devtools",'tidycensus')
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -9,7 +9,6 @@ if(any(!check)){
     install.packages(pkgs.missing)
     check <- sapply(pkgs.missing,require,warn.conflicts = TRUE,character.only = TRUE)
   } 
-padz <- function(x, n=max(nchar(x)))gsub(" ", "0", formatC(x, width=n)) 
 
 # GEOCODING with street address ==================================
 
