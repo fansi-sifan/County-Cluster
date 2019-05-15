@@ -25,13 +25,13 @@ AI_cb <- c("artificial intelligence", "intelligent systems", "machine learning",
 "natural language processing", "predictive analytics")
 
 # tokenize
-df <- cb_AI%>%
+df <- cb_all%>%
   filter(Operating.Status=="Active")
 
 cb_category <- unnest_tokens(df, out, Categories, token = "regex", pattern =",")%>%
   mutate(out = trimws(out))%>%
   group_by(out)%>%
-  mutate(is.AI = (out%in%AI_cb))%>%
+  # mutate(is.AI = (out%in%AI_cb))%>%
   count(out, sort = TRUE)
 
 # by categories
@@ -45,13 +45,28 @@ cb_city <- unnest_tokens(df, out, Categories, token = "regex", pattern =",")%>%
   mutate(share_us = sum(n)/total)%>%
   ungroup()%>%
   group_by(Headquarters.Location)%>%
-  # mutate(share_city = n/sum(n))%>%
-  # mutate(lq = share_city/share_us)%>%
-  filter(n>1)%>%
-  mutate(is.AI = (out%in%AI_cb))%>%
-  filter(is.AI)%>%
+  mutate(share_city = n/sum(n))%>%
+  mutate(lq = share_city/share_us)%>%
+  # filter(n>2)%>%
+  # mutate(is.AI = (out%in%AI_cb))%>%
+  # filter(is.AI)%>%
   # top_n(5,n)%>%
-  arrange(-n)
+  arrange(-lq)%>%
+  ungroup()
+
+# complexicty
+tmp <- cb_city%>%
+  filter(lq > 1)%>%
+  mutate(RTA = 1)%>%
+  select(city = Headquarters.Location,
+         out,RTA)%>%
+  group_by(city)%>%
+  mutate(diversity = n())%>%
+  group_by(out)%>%
+  mutate(ubiquity = n())%>%
+  ungroup()%>%
+  group_by(city)%>%
+  summarise(mean_ubi = mean(ubiquity))
 
 # by category groups
 cb_city_g <- unnest_tokens(df, out, Category.Groups, token = "regex", pattern =",")%>%
@@ -66,7 +81,8 @@ cb_city_g <- unnest_tokens(df, out, Category.Groups, token = "regex", pattern ="
   group_by(Headquarters.Location)%>%
   mutate(share_city = n/sum(n))%>%
   mutate(lq = share_city/share_us)%>%
-  # filter(n>1)%>%
-  # top_n(5,n)%>%
+  filter(n>3)%>%
+  top_n(5,n)%>%
   arrange(-lq)
 
+write.csv(cb_city_g,"cb_city_g.csv")
