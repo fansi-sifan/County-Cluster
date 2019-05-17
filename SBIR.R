@@ -74,11 +74,12 @@ SSTR_summary <- SBIR_matched%>%
   ungroup()
 
 skim(SSTR_summary)  
+save(SSTR_summary,file = "SSTR_summary.Rda")
 
 # summary functions
 SSTR_type <- function(df){
   df%>%
-    group_by(Phase,Program,county14)%>%
+    group_by(phase,program,stco_fips)%>%
     summarise(count = n())%>%
     ungroup()%>%
     mutate(share = count/sum(count))
@@ -86,15 +87,15 @@ SSTR_type <- function(df){
 
 SSTR_gender <- function(df){
   df %>%
-    select(county14,name,Year,count_awards,Hub:disadv)%>%
+    select(stco_fips,name,year,count_awards,Hub:disadv)%>%
     gather(key,value, Hub:disadv)%>%
     # remove 2007 2008 inconsistency
-    filter(Year!=2008 & Year!=2007)%>%
-    group_by(name,key,county14)%>%
+    filter(year!=2008 & year!=2007)%>%
+    group_by(name,key,stco_fips)%>%
     # assume the latest year is most accurate
-    arrange(Year)%>%
+    arrange(year)%>%
     slice(n())%>%
-    group_by(key,county14)%>%
+    group_by(key,stco_fips)%>%
     summarise(count.company = n(),
               count.awards = sum(count_awards),
               share.company = mean(value),
@@ -103,14 +104,17 @@ SSTR_gender <- function(df){
 
 SSTR_all <- function(df){
   df%>%
-    group_by(county14)%>%
+    group_by(stco_fips)%>%
     summarise(count = n(),
               amt = sum(amt, na.rm = T))
 }
-# hist(t$value)
-# sfactor(t$Year)
 
-# summary for nation, Jefferson County, and Davidson County
+SSTR_summary%>%SSTR_all()
+SSTR_summary%>%SSTR_gender()
+SSTR_summary%>%SSTR_type()
+
+
+# summary for nation, Jefferson County, and Davidson County ---------
 
 df.list <- purrr::map(list(SSTR_summary %>% mutate(county14=0),
                            SSTR_summary %>% filter(county14==1073),
@@ -127,10 +131,9 @@ map_df(df.list, SSTR_all)
 
 # peer distribution
 temp <- SSTR_summary %>%
-  mutate(FIPS = padz(county14,5))%>%
-  right_join(Peers[c("FIPS","county")])%>%
+  # right_join(Peers[c("FIPS","county")])%>%
   # filter(FIPS%in%Peers$FIPS)%>%
-  filter(Year>2010)%>%
+  filter(year>2010)%>%
   group_by(Phase,Program,county)%>%
   summarise(count = n())%>%
   ungroup()%>%
