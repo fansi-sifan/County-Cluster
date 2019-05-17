@@ -63,8 +63,7 @@ SSTR_summary <- SBIR_matched%>%
   mutate(name = tolower(gsub("[[:punct:]]+","",Company)),
          program = as.factor(Program),
          agency = as.factor(Agency),
-         phase = as.factor(Phase),
-         year = as.factor(year))%>%
+         phase = as.factor(Phase))%>%
   mutate(Hub = ifelse(Hubzone.Owned=="Y",1,0),
          gender = ifelse(Woman.Owned=="Y",1,0),
          disadv = ifelse(Socially.and.Economically.Disadvantaged=="Y",1,0))%>%
