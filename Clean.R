@@ -487,9 +487,8 @@ EXIM <- loan_datafiles$EXIM_matched%>%
   summarise(amt.tot = sum(Approved.Declined.Amount, na.rm = TRUE),
             DISBamt.tot = sum(Disbursed.Shipped.Amount, na.rm = TRUE),
             count = n())%>%
-  mutate(FIPS = padz(county14,5),
-         program = "EXIM") %>%
-  right_join(msa_ct_FIPS, by = "FIPS")
+  mutate(stco_code = str_pad(county14,5,"left","0"),
+         program = "EXIM") 
 
 #SBA
 SBA <- loan_datafiles$SBA_matched  %>%
@@ -499,9 +498,8 @@ SBA <- loan_datafiles$SBA_matched  %>%
       ApprovalFiscalYear %in% year1 ~ "2011 - 2016")) %>%
   group_by(State, county14, year_range) %>%
   summarise(amt.tot = sum(GrossApproval, na.rm = TRUE))%>%
-  mutate(FIPS = padz(as.integer(county14),5),
-         program = "SBA") %>%
-  right_join(msa_ct_FIPS, by = "FIPS")
+  mutate(stco_code = str_pad(county14,5,"left","0"),
+         program = "SBA")
 
 #SSTR
 SSTR <- loan_datafiles$SSTR_matched %>%
@@ -512,9 +510,8 @@ SSTR <- loan_datafiles$SSTR_matched %>%
   group_by(State,county14, year_range) %>%
   summarise(amt.tot = sum(Award.Amount, na.rm = TRUE), 
             count = n())%>%
-  mutate(FIPS = padz(as.integer(county14),5),
-         program = "SSTR")%>%
-  right_join(msa_ct_FIPS, by = "FIPS")
+  mutate(stco_code = str_pad(county14,5,"left","0"),
+         program = "SSTR")
 
 
 #TLR
@@ -528,9 +525,8 @@ TLR <- loan_datafiles$TLR_matched %>%
   group_by(county14, year_range) %>%
   summarise(amt.tot = sum(originalamount, na.rm = TRUE),
             count = n()) %>%
-  mutate(FIPS = padz(as.integer(county14),5),
-         program = "CDFI") %>%
-  inner_join(msa_ct_FIPS, by = "FIPS")
+  mutate(stco_code = str_pad(county14,5,"left","0"),
+         program = "CDFI")
 
 #FDIC
 FDIC <- loan_datafiles$FDIC_matched %>%
@@ -540,19 +536,21 @@ FDIC <- loan_datafiles$FDIC_matched %>%
       year %in% year1 ~ "2011 - 2016")) %>%
   group_by(county14, year_range) %>%
   summarise_if(is.numeric,sum, na.rm = TRUE)%>%
-  mutate(FIPS = padz(as.integer(county14),5),
+  mutate(stco_code = str_pad(county14,5,"left","0"),
          program = "FDIC",
-         amt.tot = x_tot*1000) %>%
-  inner_join(msa_ct_FIPS, by = "FIPS")
+         amt.tot = x_tot*1000) 
 
 # COMBINED
-PeerCounty_SMEloans <- bind_rows(
-  sapply(list(SBA, EXIM,SSTR, TLR, FDIC), filter,FIPS%in%Peers$FIPS))
+co_loans <- bind_rows(list(SBA, EXIM,SSTR, TLR, FDIC))%>%ungroup()
+save(co_loans,file = "result/co_loans.rda")
 
-PeerMetro_SMEloans <- bind_rows(
-  lapply(list(SBA, EXIM,SSTR, TLR, FDIC), function(df){
-    df %>% group_by(cbsa, metro, year_range, program)%>%
-      summarise(amt.tot = sum(amt.tot, na.rm = TRUE))}))
+load("../../metro.data/data/county_cbsa_st.rda")
+
+cbsa_loans <- co_loans %>%
+  left_join(county_cbsa_st[c("stco_fips","cbsa_code","cbsa_name","cbsa_emp","cbsa_pop")], by = c("stco_code" = "stco_fips")) %>%
+  group_by(year_range, program, cbsa_code, cbsa_name)%>%
+  summarise_if(is.numeric,sum,na.rm = T)%>%
+  filter(cbsa_code %in% c("19740","24340"))
 
 # PeerCounty_SMEloans <- bind_rows(datafiles$PeerCounty_SMEloans %>% filter(program != "SSTR"), PeerCounty_SSTR)
 

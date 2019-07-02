@@ -3,7 +3,7 @@
 # --------------
 # pkgs <- c('SifanLiu','tidyverse','tigris', "rgdal",'maptools',  "ggmap", "maps", "grid", "gridExtra",'rgeos','broom', 'ggrepel')
 
-pkgs <- c('SifanLiu','tidyverse')
+pkgs <- c('SifanLiu','tidyverse',"metro.data")
 
 check <- sapply(pkgs,require,warn.conflicts = TRUE,character.only = TRUE)
 if(any(!check)){
@@ -45,10 +45,10 @@ peers.county <- c("01073","18097","22033","22071","29095",
 #   filter(cbsa %in% peerlist)
 
 
-Peers <- county_cbsa_st %>% filter(code.county %in% peers.county)
-msa_ct_FIPS <- (county_cbsa_st %>% filter(code.cbsa == msa_FIPS))$code.county
-msa100_FIPS <- (metro100 %>% filter(istop100.cbsa))$code.cbsa
-
+Peers <- county_cbsa_st %>% filter(stco_fips %in% peers.county)
+msa_ct_FIPS <- (county_cbsa_st %>% filter(cbsa_code == msa_FIPS))$stco_fips
+msa_cf_fips <- (county_cbsa_st %>% filter(cbsa_code %in% (Peers$cbsa_code)))$stco_fips
+msa100_FIPS <- get_code_cbsa100()
 
 # function to split df by na value, merge by a different xwalk, bind
 split_join_merge <- function(df.source, df.target,col.filter,col.join){
