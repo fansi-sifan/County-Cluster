@@ -24,12 +24,15 @@ poverty <- c("B17001_001E","B17001_002E")
 pop <- c("B01003_001E")
 tract_acs_vars <- c(novehicle,unemp,poverty,pop)
 
-map.cty <- get_acs(geography = "tract", year = 2017,
-        state = st_FIPS, county = substr(msa_ct_fips,3,5),
-        output = "wide",geometry = TRUE,
-        variables = tract_acs_vars)
+map.cty <- get_acs(geography = "tract", 
+                   year = 2017,
+                   state = st_FIPS, 
+                   county = substr(msa_ct_FIPS,3,5),
+                   output = "wide",geometry = TRUE,
+                   variables = tract_acs_vars,
+                   key = Sys.getenv("CENSUS_API_KEY"))
 
-mapview(map.cty%>%filter(GEOID%in%nb_Bham),zcol = pop)
+# mapview(map.cty%>%filter(GEOID%in%nb_Bham),zcol = pop)
 
 # Peer map ----------------------------------
 map_data <- cbsa@data %>% filter(CBSAFP %in% Peers$cbsa)
@@ -52,7 +55,7 @@ map_Bham <- function(df,var){
   ggplot()+
     geom_sf(data = map.cty %>% filter(substr(GEOID,3,5)==ct_FIPS), color = "#bdbdbd")+
     geom_sf(data = df, aes_string(fill = var))+
-    geom_sf(data = map.Bham, color = "#000000", size = 1, fill = NA)+
+    geom_sf(data = map.Bham, color = "#ffc000", size = 1, fill = NA)+
     theme(axis.title = element_blank(), 
           axis.text = element_blank(),
           rect = element_rect(fill = "#D9D9D9", colour=NA),
@@ -61,6 +64,22 @@ map_Bham <- function(df,var){
           panel.grid = element_blank())+
     coord_sf(datum = NA)
 }
+
+map_Bham_tp <- function(df,var){
+  ggplot()+
+    geom_sf(data = map.cty %>% filter(substr(GEOID,3,5)==ct_FIPS), color = "white")+
+    geom_sf(data = df, aes_string(fill = var))+
+    geom_sf(data = map.Bham, color = "#ffc000", size = 1, fill = NA)+
+    theme(axis.title = element_blank(), 
+          axis.text = element_blank(),
+          rect = element_rect(fill = "transparent", colour=NA),
+          panel.background = element_rect(fill = "transparent",colour = NA),
+          plot.background = element_rect(fill = "transparent", colour = NA),
+          panel.grid = element_blank(),
+          legend.text = element_text(color = "white"))+
+    coord_sf(datum = NA)
+}
+
 
 # LODES by census block group -----------------------
 # all private jobs, by workplace block
