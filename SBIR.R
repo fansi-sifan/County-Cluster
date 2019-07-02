@@ -67,82 +67,174 @@ SSTR_summary <- SBIR_matched%>%
   mutate(Hub = ifelse(Hubzone.Owned=="Y",1,0),
          gender = ifelse(Woman.Owned=="Y",1,0),
          disadv = ifelse(Socially.and.Economically.Disadvantaged=="Y",1,0))%>%
+  # remove duplicates
+  unique()%>%
   select(-contains("."),-Program,-Agency, -Phase,-Company)%>%
   group_by(name)%>%
   mutate(count_awards=n())%>%
   ungroup()
 
-skim(SSTR_summary)  
+skimr::skim(SSTR_summary)  
 save(SSTR_summary,file = "SSTR_summary.Rda")
 
-# summary functions
-SSTR_type <- function(df){
-  df%>%
-    group_by(phase,program,stco_fips)%>%
-    summarise(count = n())%>%
-    ungroup()%>%
-    mutate(share = count/sum(count))
-}
-
-SSTR_gender <- function(df){
-  df %>%
-    select(stco_fips,name,year,count_awards,Hub:disadv)%>%
-    gather(key,value, Hub:disadv)%>%
-    # remove 2007 2008 inconsistency
-    filter(year!=2008 & year!=2007)%>%
-    group_by(name,key,stco_fips)%>%
-    # assume the latest year is most accurate
-    arrange(year)%>%
-    slice(n())%>%
-    group_by(key,stco_fips)%>%
-    summarise(count.company = n(),
-              count.awards = sum(count_awards),
-              share.company = mean(value),
-              share.award= weighted.mean(value, count_awards))
-}
-
-SSTR_all <- function(df){
-  df%>%
-    group_by(stco_fips)%>%
-    summarise(count = n(),
-              amt = sum(amt, na.rm = T))
-}
-
-SSTR_summary%>%SSTR_all()
-SSTR_summary%>%SSTR_gender()
-SSTR_summary%>%SSTR_type()
+## LOAD ==============================
+load("SSTR_summary.rda")
 
 
-# summary for nation, Jefferson County, and Davidson County ---------
+SSTR_blog <- SSTR_summary%>%
+# take out transactions without addresses
+    filter(!is.na(stco_fips))%>%
+  # filter(year==2017)%>%
+  # mutate(year_range = case_when(
+  #   year<=2014 ~ "2012 ~ 2014",
+  #   year>2014 ~ "2015 ~ 2017")%>%
+# only recent trends, 2012
+    filter(year >=2005 & year <=2017)
 
-df.list <- purrr::map(list(SSTR_summary %>% mutate(county14=0),
-                           SSTR_summary %>% filter(county14==1073),
-                           SSTR_summary %>% filter(county14==47037)),
-                      filter,Year > 2010)
+# To do ============================
+# fix gender
+# assume the latest label is accurate?
+company <- SSTR_blog %>%
+  group_by(stco_fips, name) %>%
+  mutate(m_Hub = mean(Hub,na.rm = T),
+         m_gender = mean(gender, na.rm = T),
+         m_disadv = mean(disadv, na.rm = T))
 
-type <- map_df(df.list,SSTR_type)%>%
-  arrange(Program, Phase)
+company_matched <- company%>%filter(m_gender==1|m_gender ==0)%>%ungroup%>%select(stco_fips,name,gender)%>%unique()
+company_unmatched <- company%>%filter(m_gender!=1&m_gender !=0)%>%ungroup%>%select(stco_fips,name,gender,year,m_gender)
 
-demo <- map_df(df.list,SSTR_gender)%>%
-  arrange(key)
+# fix
+company_fix <- company_unmatched %>%
+  # if 2007 and 2008 are the only outliers
+  filter(year!=2007 & year!=2008)%>%
+  group_by(stco_fips, name) %>%
+  summarise(m_gender = mean(gender, na.rm = T))%>%
+  # if outliers are small enough
+  mutate(m_gender = case_when(
+    m_gender > 0.8 ~ 1,
+    m_gender < 0.2 ~ 0,
+    T ~ m_gender
+  ))%>%
+  filter(m_gender==1|m_gender ==0)%>%
+  ungroup%>%
+  mutate(gender = case_when(
+    m_gender > 0.8 ~ 1,
+    m_gender < 0.2 ~ 0,
+    T ~ m_gender
+  ))%>%
+  select(stco_fips,name,gender)%>%
+  unique()
 
-map_df(df.list, SSTR_all)
+# update
 
-# peer distribution
-temp <- SSTR_summary %>%
-  # right_join(Peers[c("FIPS","county")])%>%
-  # filter(FIPS%in%Peers$FIPS)%>%
-  filter(year>2010)%>%
-  group_by(Phase,Program,county)%>%
-  summarise(count = n())%>%
+company_matched <- bind_rows(company_matched,company_fix)%>%unique()
+
+company_unmatched %>%left_join(company_matched,by = c("stco_fips","name"))%>%
+  filter(is.na(gender.y))%>%arrange(name)
+  
+SSTR_blog <- SSTR_blog %>%
+  select(- gender)%>%
+  left_join(company_matched,by = c("stco_fips","name"))
+
+# companies ------------------------------
+c <- SSTR_blog %>%
+  group_by(stco_fips,name)%>%
+  summarise(count = n(),
+            amt = sum(amt,na.rm = T)) %>%
   ungroup()%>%
-  mutate(share = count/sum(count))
+  mutate(count_pct = count/sum(count),
+         amt_pct = amt/sum(amt))%>%
+  arrange(-amt_pct)%>%
+  mutate(cumamt = cumsum(amt_pct))
 
-bbplot(temp%>%mutate(type = paste(Program,Phase,sep=", ")))+
-  geom_bar(aes(x=reorder(county,share),y=share,fill = type), stat = "identity",position = "fill")+
-  scale_y_continuous(labels = scales::percent)+
-  scale_x_discrete(name = "places")+
-  coord_flip()
+# match by msa -----------------------------------------------
+cbsa_SSTR <- SSTR_blog %>% ungroup %>%
+  left_join(county_cbsa_st, by = "stco_fips") %>%
+  # rural counties as nonmetro
+  mutate(cbsa_type = ifelse(is.na(cbsa_type),"nonmetro",as.character(cbsa_type)))
 
-type%>%select(-share)%>%
-  spread(county14,count)
+# Count and amount per employee, by cbsa
+
+t <- cbsa_SSTR%>%
+  # filter(cbsa_type %in% c("top100","metro"))%>%
+  group_by(cbsa_code,cbsa_name,cbsa_emp,cbsa_type)%>%
+  # group_by(year_range)%>%
+  # group_by(agency)%>%
+  summarise(cbsa_count = n(),
+         cbsa_amt = sum(amt,na.rm = T))%>%
+  ungroup()%>%
+  mutate(cbsa_count_per_emp = cbsa_count/cbsa_emp,
+         cbsa_amt_per_emp = cbsa_count/cbsa_emp,
+         cbsa_count_pct =  cbsa_count/sum(cbsa_count),
+         cbsa_amt_pct = cbsa_amt/sum(cbsa_amt))
+
+
+# summarise by metro type =================
+cbsa_type_sstr <- t %>%
+  ungroup()%>%
+  # filter(!is.na(cbsa_emp))%>%
+  group_by(cbsa_type)%>%
+  summarise(cbsa_type_count = sum(cbsa_count),
+         cbsa_type_amt = sum(cbsa_amt,na.rm = T),
+         cbsa_type_emp = sum(cbsa_emp,na.rm = T))%>%
+  # calculate nonmetro employment, national total - all other types
+  mutate(cbsa_type_emp = ifelse(cbsa_type_emp==0,
+                                sum(county_cbsa_st$co_emp)-sum(cbsa_type_emp,na.rm = T),
+                                cbsa_type_emp))%>%
+  mutate(cbsa_type_count_per_emp = cbsa_type_count/cbsa_type_emp,
+         cbsa_type_amt_per_emp = cbsa_type_amt/cbsa_type_emp,
+         cbsa_type_count_pct =  cbsa_type_count/sum(cbsa_type_count),
+         cbsa_type_amt_pct = cbsa_type_amt/sum(cbsa_type_amt))
+    
+  
+write.csv(t,"cbsa_sstr.csv") 
+
+# summary =================
+# overall
+
+y <- cbsa_SSTR %>%
+  group_by(year) %>%
+  summarise(year_count = n(),
+            year_amt = sum(amt, na.rm = T),
+            year_hub = mean(Hub,na.rm = T),
+            year_gender = mean(gender, na.rm = T),
+            year_disadv = mean(disadv, na.rm = T),
+            year_hub_wt = weighted.mean(Hub,amt,na.rm = T),
+            year_gender_wt = weighted.mean(gender, amt, na.rm = T),
+            year_disadv_wt = weighted.mean(disadv, amt,na.rm = T))%>%
+  ungroup()%>%
+  mutate(year_pct_count = year_count/sum(year_count),
+         year_pct_amt = year_amt/sum(year_amt))%>%
+  arrange(-year)
+
+# by msa
+g <- cbsa_SSTR %>%
+  # filter(!is.na(gender))%>%
+  group_by(cbsa_code,cbsa_name,cbsa_type,gender)%>%
+  summarise(cbsa_count = n(),
+            cbsa_amt = sum(amt, na.rm = T))%>%
+  mutate(cbsa_count_pct = cbsa_count/sum(cbsa_count),
+         cbsa_amt_pct = cbsa_amt/sum(cbsa_amt))%>%
+  ungroup()%>%
+  mutate(cbsa_avg_amt = cbsa_amt/cbsa_count)
+
+m <- cbsa_SSTR %>%
+  # filter(!is.na(gender))%>%
+  group_by(cbsa_code,cbsa_name,cbsa_type,disadv)%>%
+  summarise(cbsa_count = n(),
+            cbsa_amt = sum(amt, na.rm = T))%>%
+  mutate(cbsa_count_pct = cbsa_count/sum(cbsa_count),
+         cbsa_amt_pct = cbsa_amt/sum(cbsa_amt))%>%
+  ungroup()%>%
+  mutate(cbsa_avg_amt = cbsa_amt/cbsa_count)
+
+m <- m%>%left_join(cbsa_minority,by = "cbsa_code")
+  
+m <- m%>%mutate(delta = cbsa_pct_minority-cbsa_amt_pct)
+
+g %>% group_by(cbsa_type,gender)%>%
+  summarise(cbsa_type_count = sum(cbsa_count),
+            cbsa_type_amt = sum(cbsa_amt))%>%
+  mutate(cbsa_type_count_pct = cbsa_type_count/sum(cbsa_type_count),
+         cbsa_type_amt_pct = cbsa_type_amt/sum(cbsa_type_amt),
+         cbsa_type_avg = cbsa_type_amt/cbsa_type_count)
