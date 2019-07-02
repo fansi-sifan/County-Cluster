@@ -13,43 +13,56 @@ if(any(!check)){
 # load loan data files
 load("Temp data/SBA_loan_cleaned.Rda")
 
-SBIR_MSA <- loan_datafiles$SSTR_matched%>%
-  filter(Award.Year>=2011 & Award.Year<2017)%>%
-  group_by(county14)%>%
-   summarise(amt.tot = sum(Award.Amount, na.rm = T),
-            count = n())%>%
-  mutate(FIPS = padz(county14,5))%>%
-  left_join(msa_ct_FIPS[c("cbsa","FIPS")],by = "FIPS")%>%
-  group_by(cbsa)%>%
-  summarise(amt.tot = sum(amt.tot),
-            count = sum(count))
+# SBIR_MSA <- loan_datafiles$SSTR_matched%>%
+#   filter(Award.Year>=2011 & Award.Year<2017)%>%
+#   group_by(county14)%>%
+#    summarise(amt.tot = sum(Award.Amount, na.rm = T),
+#             count = n())%>%
+#   mutate(FIPS = padz(county14,5))%>%
+#   left_join(msa_ct_FIPS[c("cbsa","FIPS")],by = "FIPS")%>%
+#   group_by(cbsa)%>%
+#   summarise(amt.tot = sum(amt.tot),
+#             count = sum(count))
+cbsa_sbir <- t
 
-UnivRD_MSA <- read.csv("source/NSF_univ.csv")%>%
-  mutate(cbsa=padz(cbsacode,5))%>%
-  group_by(cbsa)%>%
+cbsa_VC <- read.csv('source/VC.csv') %>%
+  filter(round == "Total VC" & measure == "Capital Invested ($ M) per 1M Residents") %>%
+  mutate(cbsa_code = as.character(cbsa13))
+
+cbsa_rd <- read.csv("source/NSF_univ.csv")%>%
+  mutate(cbsa_code = str_pad(cbsacode,5,"left","0"))%>%
+  group_by(cbsa_code)%>%
   summarise(RD_amt = sum(`Deflated.Total.R.D.Expenditures.in.All.Fields.Sum.`, na.rm = T))
+
+temp <- plyr::join_all(list(cbsa_rd,cbsa_sbir,cbsa_VC),
+                       by = "cbsa_code",
+                       type = "inner")
 
 # relationship between patents and startup activities ------------------------------
 temp <- plyr::join_all(list(
+  # read.csv('source/USPTO_msa.csv') %>%
+  #   filter(GeoType == "Metropolitan Statistical Area")%>%
+  #   select(ID.Code, Total)%>%
   read.csv('source/USPTO_msa.csv') %>%
     filter(GeoType == "Metropolitan Statistical Area")%>%
     select(ID.Code, Total)%>%
-    mutate(cbsa = substr(as.character(ID.Code),2,6)),
-  read.csv('source/Complexity_msa.csv') %>%
-    mutate(cbsa = as.character(cbsa)),
+    select(cbsa_code,complex),
   read.csv('source/young_firms.csv')%>%
     spread(indicator, value)%>%
-    mutate(young_share = `Employment at firms 0-5 years old`/Jobs),
+    mutate(young_share = `Employment at firms 0-5 years old`/Jobs)%>%
+    select(cbsa_code = cbsa,young_share),
+  UnivRD_MSA,
   read.csv('source/VC.csv') %>%
     filter(round == "Total VC" & measure == "Capital Invested ($ M) per 1M Residents") %>%
-    mutate(cbsa = as.character(cbsa13)),
-  SBIR_MSA,UnivRD_MSA,
-  read.csv("source/I5HGC_density.csv")%>%
-    mutate(cbsa = as.character(CBSA))),
+    mutate(cbsa_code = as.character(cbsa13)),
+  
+  SBIR_MSA,
+  # read.csv("source/I5HGC_density.csv")%>%
+  #   mutate(cbsa_code = as.character(CBSA)),
     
-  by = "cbsa",
+  by = "cbsa_code",
   type = "inner"
-)
+))
 # education attainment
 library(censusapi)
 edu <- c("S1501_C02_012E", "S1501_C02_009E", "S1501_C02_010E","S1501_C02_011E")
@@ -61,22 +74,26 @@ t_edu <- t_edu%>%
          cbsa = metropolitan_statistical_area_micropolitan_statistical_area)%>%
   select(-contains("S1501"),-contains("metro"))
 
-#combine
-t <- temp %>% 
-  left_join(read.csv("../../R/xwalk/msa.pop.csv")%>%
-                     mutate(cbsa = as.character(cbsa)), by = "cbsa") %>%
-  mutate(patent_pc = Total/pop2016,
-         SBIR_pc = amt.tot/pop2016,
-         UnivRD_pc = RD_amt/pop2016) %>%
-  select(cbsa, metro_name = MSA,
-         young_firm_share = young_share, 
-         pop2016,
-         patent_complex = complex,
-         patent_pc,SBIR_pc,UnivRD_pc,
+# combine
+cbsa_innovation <- temp %>% 
+  left_join(county_cbsa_st[c("cbsa_code","cbsa_pop")]%>%unique(), by = "cbsa_code") %>%
+  mutate(SBIR_pc = cbsa_amt/cbsa_pop,
+         # patent_pc = Total/cbsa_pop,
+         UnivRD_pc = RD_amt/cbsa_pop,
+         SBIR_VC = SBIR_pc/value) %>%
+  select(cbsa_code, metro_name = MSA,
+         # young_firm_share = young_share, 
+         cbsa_pop,
+         # patent_complex = complex,
+         # patent_pc,
+         SBIR_pc,cbsa_count,cbsa_amt,
+         UnivRD_pc,
          VC_pc = value,
-         Inc_pc = I5HGC_Density) %>%
-  # inner_join(MM %>% mutate(cbsa = as.character(`CBSA`)), by = "cbsa") %>%
-  left_join(t_edu, by = "cbsa")
+         # Inc_pc = I5HGC_Density,
+         SBIR_VC) 
+# %>%
+#   # inner_join(MM %>% mutate(cbsa = as.character(`CBSA`)), by = "cbsa") %>%
+#   left_join(t_edu, by = "cbsa")
 
 # write.csv(t, "result/patent_startup.csv")
 
