@@ -265,3 +265,11 @@ ase %>%
   pivot_wider(names_from = "RACE_GROUP.display-label", values_from = "n_firms") %>%
   filter(as.character(GEO.id2) %in% Peers$cbsa_code) %>%
   View()
+
+ase %>%
+  filter(GEO.id2 == 13820) %>%
+  filter(NAICS.id == "00" & VET_GROUP.id  == "001" & SEX.id == "001" & ETH_GROUP.id == "001") %>%
+  filter(YIBSZFI.id == "311") %>%
+  mutate(size = EMP/FIRMPDEMP) %>%
+  select(`RACE_GROUP.display-label`, size) 
+  
