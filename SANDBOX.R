@@ -230,3 +230,38 @@ term %>% group_by(Project.Title)%>%
   coord_flip()
   
 
+# ASE ======================
+ase <- read_csv("source/ASE_2016_00CSA02_with_ann.csv", skip = 1)
+names <- read_csv("source/ASE_2016_00CSA02_with_ann.csv", n_max = 1)
+names(ase) <- names(names)
+
+# overall business formation rate ---------
+
+ase %>%
+  filter(NAICS.id == "00" & VET_GROUP.id  == "001" & SEX.id == "001" & ETH_GROUP.id == "001") %>%
+  filter(RACE_GROUP.id == "00") %>%
+  # filter(RACE_GROUP.id %in% c("40","00")) %>%
+  mutate(firm_age = case_when(
+    YIBSZFI.id %in% c("311") ~ "young",
+    YIBSZFI.id %in% c("321", "322", "323", "318", "319") ~ "mature", 
+    YIBSZFI.id == "001" ~ "total"
+  )) %>%
+  group_by(GEO.id2, `GEO.display-label`, firm_age, `RACE_GROUP.display-label`) %>%
+  summarise(n_firms = sum(FIRMPDEMP, na.rm = T))%>%
+  pivot_wider(names_from = "firm_age", values_from = "n_firms") %>%
+  mutate(pct_young = young/total) %>%
+  filter(as.character(GEO.id2) %in% Peers$cbsa_code) %>%
+  ungroup() %>%
+  mutate(gap = (max(pct_young) - pct_young)*total,
+         gap_avg = (mean(pct_young) - pct_young)*total) %>%
+  View()
+
+ase %>%
+  filter(NAICS.id == "00" & VET_GROUP.id  == "001" & SEX.id == "001" & ETH_GROUP.id == "001") %>%
+  # filter(YIBSZFI.id == "311") %>%
+  filter(YIBSZFI.id %in% c("311", "318", "319")) %>%
+  group_by(GEO.id2, `GEO.display-label`,`RACE_GROUP.display-label`) %>%
+  summarise(n_firms = sum(FIRMPDEMP))%>%
+  pivot_wider(names_from = "RACE_GROUP.display-label", values_from = "n_firms") %>%
+  filter(as.character(GEO.id2) %in% Peers$cbsa_code) %>%
+  View()
