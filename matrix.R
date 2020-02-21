@@ -69,8 +69,8 @@ edu <- c("S1501_C02_012E", "S1501_C02_009E", "S1501_C02_010E","S1501_C02_011E")
 t_edu <- GetACS("acs/acs5/subject",edu, 'msa', vintage = 2016)
 
 t_edu <- t_edu%>%
-  mutate(college_share = S1501_C02_012E+S1501_C02_012E,
-         HSabove_share = college_share + S1501_C02_009E+S1501_C02_010E,
+  mutate(college_share = S1501_C02_012E+S1501_C02_013E, # BA + professional
+         HSabove_share = college_share + S1501_C02_009E+S1501_C02_010E+S1501_C02_011E, # high school + some college + associate 
          cbsa = metropolitan_statistical_area_micropolitan_statistical_area)%>%
   select(-contains("S1501"),-contains("metro"))
 
